@@ -60,7 +60,7 @@ scripts/validate-sql.ts                   → shared
 ### From README.md
 
 - [x] Zcash shielded transactions hide amounts, sender, and recipient — REFUTED AS STATED: PAL performs no ZK proof execution. The deposit address is returned by 1Click API (`lib/oneClick.ts:126`); PAL only QR-displays it. All shielded tx logic (if any) is entirely inside 1Click (Defuse Protocol). The README claim is misleading — §1.3 §1.5
-- [ ] Automatic bridging from Zcash to Base/Solana via 1-Click API — verify 1Click integration exists and targets Base/Solana — lib/oneClick.ts — §1.5
+- [x] Automatic bridging from Zcash to Base/Solana via 1-Click API — CONFIRMED: `lib/oneClick.ts:169-179` defines `ASSETS.ZCASH = 'nep141:zec.omft.near'`, `ASSETS.USDC_BASE`, `ASSETS.USDC_SOLANA`. `register-deposit/route.ts:31-36` selects `usdcAsset` based on chain. `getSwapQuote()` called with `originAsset: ASSETS.ZCASH`, `destinationAsset: usdcAsset`. Both Base and Solana destination chains are supported. — §1.5
 - [x] AI-Powered Intent Recognition: natural language processing to understand payment intents — CONFIRMED: `analyzePromptWithNearAI` in `lib/nearAI.ts:29` calls pgvector embedding search (`lib/serviceRegistry.ts:37`) then LLM chat completion (`lib/nearAI.ts:112`) with `gpt-4o-mini` (OpenAI) or `deepseek-chat-v3-0324` (NEAR AI Cloud) — §1.1
 - [x] Semantic Service Matching: AI-powered search matches user queries to services (e.g., "Pay onlyfan" → OnlyFans) — CONFIRMED: `searchServicesSemantic` in `lib/serviceRegistry.ts:52-96` calls `match_services` RPC via `supabase.rpc('match_services', {...})` at `lib/serviceRegistry.ts:68`. pgvector `<=>` cosine distance operator is used in `supabase-setup.sql:69-74` — §1.2
 - [ ] NEAR Chain Signatures: MPC-based key management for cross-chain transaction signing — verify v1.signer is called for tx signing — lib/chainSig.ts, lib/near.ts — §1.6
@@ -214,12 +214,40 @@ scripts/validate-sql.ts                   → shared
 
 #### §1.5 — 1Click status states (new)
 
-- [ ] **1Click `getExecutionStatus` response structure** — the cron handler checks `statusResponse.status || statusResponse.executionStatus || statusResponse.state` (`cronjob-check-deposits/route.ts:37-40`), suggesting the SDK response key is not known with certainty. Actual SDK response field name needs verification against `@defuse-protocol/one-click-sdk-typescript@0.1.14` type definitions. — §1.5
+- [~] **1Click `getExecutionStatus` response structure** — PARTIALLY RESOLVED: `cronjob-check-deposits/route.ts:37-40` and `check-deposit/route.ts:27-30` and `get-url/route.ts:70-73` all check `.status || .executionStatus || .state` in that order. The triple fallback pattern + `as any` cast confirms SDK response field is not known statically. `node_modules/@defuse-protocol/one-click-sdk-typescript` was not present in the local clone — SDK type definitions require Task 10 (§3.1) analysis of the SDK source. Known status values from `check-deposit/route.ts:6-15` docs comment: `PENDING_DEPOSIT`, `PROCESSING`, `SUCCESS`, `INCOMPLETE_DEPOSIT`, `REFUNDED`, `FAILED`. — §1.5
 
-- [ ] **1Click status `INCOMPLETE_DEPOSIT` does not trigger x402 execution or user notification** — `check-deposit/route.ts:66-68` returns `{ incompleteDeposit: true }` but the cronjob skips x402 for any non-SUCCESS status. No automatic retry or user alert exists for partial deposits. Verify whether 1Click eventually auto-refunds or the deposit is permanently stuck. — §1.4 §1.5
+- [x] **1Click status `INCOMPLETE_DEPOSIT` does not trigger x402 execution or user notification** — CONFIRMED: `check-deposit/route.ts:65-68` returns `{ incompleteDeposit: true }` but neither the cronjob nor the check-deposit route performs any follow-up action. No automatic retry, no user alert, no re-deposit UI. The deposit enters a limbo state — cron skips it (not SUCCESS), and PAL has no refund endpoint. 1Click may eventually auto-refund (status `REFUNDED`) but that is 1Click's internal policy, not PAL behavior. — §1.4 §1.5
 
 #### §1.7 — x402 trigger (new)
 
 - [ ] **`signX402TransactionWithChainSignature()` return value is always an Ethereum tx hash** — `cronjob-check-deposits/route.ts:127-132` calls this function and stores the result as `transactionHash`. Verify in `lib/chainSig.ts` that the return type is indeed a tx hash string and not a signed-but-unbroadcast payload. Relevant for understanding whether x402 unlock is synchronous or deferred. — §1.7
 
-- [ ] **`payTo` extraction from `quoteData` is fragile** — `cronjob-check-deposits/route.ts:85` uses `quote?.payTo || tracking.recipient || quote?.recipient`. The 1Click `/v0/quote` response likely does not include a `payTo` field (it's a swap quote, not an x402 quote). This means `tracking.recipient` (the AI-parsed x402 address) is almost always used. Verify that `tracking.recipient` is reliably populated from intent parsing. — §1.4 §1.7
+- [x] **`payTo` extraction from `quoteData` is fragile** — CONFIRMED: `cronjob-check-deposits/route.ts:85` uses `quote?.payTo || tracking.recipient || quote?.recipient`. The 1Click `/v0/quote` response does NOT include a `payTo` field (it's a swap quote, not an x402 quote), so `quote?.payTo` is always `undefined`. The effective path is always `tracking.recipient`, which is the AI-parsed x402 address stored at deposit registration time (`register-deposit/route.ts:113`). `tracking.recipient` IS reliably populated from `lib/nearAI.ts:43–44` intent output (`receivingAddress`). The fallback chain is valid in practice but opaque from the code. — §1.4 §1.7
+
+---
+
+### NEW claims from Task 5 (1Click bridge — §1.5)
+
+#### §1.5 — 1Click integration (resolved and new)
+
+- [x] **`ONE_CLICK_JWT` missing → 0.1% fee** — CONFIRMED by code: `lib/oneClick.ts:6,12-14` — if `ONE_CLICK_JWT` env var is empty, `OpenAPI.TOKEN` is not set and Authorization header is omitted from both SDK calls and raw fetch calls. README states "without JWT incurs 0.1% fee on swaps." — §1.5
+
+- [x] **`getAvailableTokens()` is exported but never called in the live app** — CONFIRMED: `lib/oneClick.ts:17-43` exports `getAvailableTokens()`. `rg -n "getAvailableTokens"` finds only its definition in `lib/oneClick.ts` and import in `register-deposit/route.ts:3`, but the function is never invoked in `register-deposit/route.ts` body. Dead code in current implementation. — §1.5
+
+- [x] **`swapType: 'EXACT_OUTPUT'` despite comment saying "FLEX_INPUT"** — CONFIRMED: `lib/oneClick.ts:80` — `swapType: 'EXACT_OUTPUT'` with comment `// Exact USDC output amount, calculate required Zcash input`. The FLEX_INPUT mention is in the QuoteRequest interface comment only (`lib/oneClick.ts:48`). EXACT_OUTPUT means user specifies the USDC amount they want out, and 1Click computes how much ZEC to send in. — §1.5
+
+- [x] **`recipient` in `/v0/quote` is `swapWallet` (NEAR Chain Sig EVM address), NOT the final service payment address** — CONFIRMED: `register-deposit/route.ts:57-58` — `recipientAddress: swapWallet` where `swapWallet = await getEthereumAddressFromProxyAccount()`. The final x402 `payTo` is `tracking.recipient` (the original AI-parsed service address). 1Click delivers USDC to the intermediate `swapWallet`; PAL then executes x402 to route to the final recipient. — §1.5
+
+- [x] **Privacy story is false at API level** — CONFIRMED: `/v0/quote` request body contains both `refundTo` (sender's Zcash address) and `recipient` (swapWallet EVM address) in the same call (`lib/oneClick.ts:86,88`). 1Click solver sees the full linkage: sender ZEC address + destination EVM address + amount. No unlinkability exists at the protocol layer. Zcash z-address shielding (if the deposit address is a z-address) only affects L1 observers — 1Click has full cleartext knowledge. — §1.5
+
+#### §3.1 — 1Click protocol (for Task 10)
+
+- [ ] **What is `@defuse-protocol/one-click-sdk-typescript@0.1.14`'s actual `getExecutionStatus` return type?** — SDK type definitions needed. The triple `.status || .executionStatus || .state` fallback in PAL code suggests the SDK may have changed its schema between versions. Task 10 must read SDK source or npm published types. — §3.1
+
+- [ ] **Is the 1Click deposit address a Zcash t-address or z-address?** — PAL does not validate the format of `depositAddress` returned by `/v0/quote`. If it's a t-address, Zcash shielding is irrelevant (transparent). If z-address, the shielded properties apply on Zcash L1 but not at the API level. Task 10 must check 1Click docs/API response samples. — §3.1
+
+- [ ] **Who runs 1Click / what is the "Defuse Protocol"?** — `lib/oneClick.ts:1` cites `https://github.com/near-examples/near-intents-examples`. Base URL is `chaindefuser.com`. Task 10 must identify the operator, legal entity, solver network design, and whether the service is decentralized or centralized. — §3.1
+
+- [ ] **What does 1Click do with the ZEC between deposit and swap?** — From PAL's perspective, ZEC goes into the deposit address and USDC comes out at `swapWallet`. The internal mechanism (NEAR Intents, solver auction, bridging protocol) is opaque to PAL. Task 10 must analyze 1Click's own documentation and NEAR Intents architecture. — §3.1
+
+- [ ] **Does 1Click support zaddr (shielded) deposit addresses, or only t-addresses?** — Critical for PAL's privacy claim. If deposit addresses are t-addresses, the "Zcash shielded" marketing is entirely false even at L1. Task 10 must determine this from 1Click API docs or test responses. — §3.1
