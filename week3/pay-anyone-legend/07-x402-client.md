@@ -1,9 +1,9 @@
 # §1.7 x402 client (x402 클라이언트)
 
 > **Cross-reference:**
-> - §1.4(`04-deposit-tracking.md`) — Vercel cron이 1Click `SUCCESS` 시에만 이 서브시스템을 트리거함을 확립.
-> - §1.5(`05-one-click-bridge.md`) — two-hop 설계: 1Click → `swapWallet` → x402 → 최종 수신자.
-> - §1.6(`06-near-chain-signatures.md`) — EIP-3009 `transferWithAuthorization`이 EIP-712 위에 구현되고, MPC 서명이 두 번 수행되며, `signedPayload`는 실제로 tx hash를 저장함을 확립.
+> - [§1.4 deposit tracking](./04-deposit-tracking.md) — Vercel cron이 1Click `SUCCESS` 시에만 이 서브시스템을 트리거함을 확립.
+> - [§1.5 1Click bridge](./05-one-click-bridge.md) — two-hop 설계: 1Click → `swapWallet` → x402 → 최종 수신자.
+> - [§1.6 NEAR Chain Signatures](./06-near-chain-signatures.md) — EIP-3009 `transferWithAuthorization`이 EIP-712 위에 구현되고, MPC 서명이 두 번 수행되며, `signedPayload`는 실제로 tx hash를 저장함을 확립.
 
 ---
 
@@ -126,9 +126,9 @@ fetch(redirectUrl, {
   - `/api/content/get-url` 엔드포인트: tx hash를 `X-PAYMENT` 헤더로 content 서버에 전달
 
 - **Dependencies (internal):**
-  - `lib/chainSig.ts` — MPC 서명 + Base 브로드캐스트 전담 (§1.6)
-  - `lib/depositTracking.ts` — `updateDepositTracking()`, `getDepositTracking()` (§1.4)
-  - `lib/oneClick.ts` — `checkSwapStatus()` (§1.5)
+  - `lib/chainSig.ts` — MPC 서명 + Base 브로드캐스트 전담 — [§1.6 NEAR Chain Signatures](./06-near-chain-signatures.md)
+  - `lib/depositTracking.ts` — `updateDepositTracking()`, `getDepositTracking()` — [§1.4 deposit tracking](./04-deposit-tracking.md)
+  - `lib/oneClick.ts` — `checkSwapStatus()` — [§1.5 1Click bridge](./05-one-click-bridge.md)
 
 - **Dependencies (external):**
   - NEAR MPC `v1.signer` 컨트랙트 — 모든 서명 연산의 실행자

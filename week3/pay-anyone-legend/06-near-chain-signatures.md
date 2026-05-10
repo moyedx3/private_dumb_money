@@ -1,9 +1,9 @@
 # §1.6 NEAR Chain Signatures (NEAR Chain Signatures / MPC)
 
 > **Cross-reference:**
-> - §1.5(`05-one-click-bridge.md`)에서 확립된 **two-hop 설계**: 1Click → `swapWallet`(Chain Signatures 파생 EVM 주소) → x402 → 최종 수신자.
+> - [§1.5 1Click bridge](./05-one-click-bridge.md)에서 확립된 **two-hop 설계**: 1Click → `swapWallet`(Chain Signatures 파생 EVM 주소) → x402 → 최종 수신자.
 > - 이 문서는 그 `swapWallet`이 *어떻게 생성되고*, 그 주소 소유의 *서명이 어떻게 수행되는지*를 설명한다.
-> - 서명된 트랜잭션이 x402 프로토콜에서 어떻게 소비되는지는 §1.7에서 다룬다.
+> - 서명된 트랜잭션이 x402 프로토콜에서 어떻게 소비되는지는 [§1.7 x402 client](./07-x402-client.md)에서 다룬다.
 
 ---
 
@@ -125,8 +125,9 @@ NEAR Chain Signatures 서브시스템은 **PAL 서버가 destination chain(Base)
   - `signX402TransactionWithChainSignature()` → Ethereum tx hash 문자열 (예: `0x...`) — **브로드캐스트까지 완료된 상태**
 
 - **Dependencies (internal):**
-  - `lib/kdf.ts` — 저수준 공개키 파생 유틸리티 (단, `lib/chainSig.ts`의 production path는 `chainsig.js` SDK를 대신 사용; `lib/kdf.ts`는 `lib/chainSig.ts`에서 직접 import하지 않음)
+  - `lib/kdf.ts` — 저수준 공개키 파생 유틸리티 (단, `lib/chainSig.ts`의 production path는 `chainsig.js` SDK를 대신 사용; `lib/kdf.ts`는 `lib/chainSig.ts`에서 직접 import하지 않음) — KDF 역할 판정: [§1.6](./06-near-chain-signatures.md) Notes 참조
   - `lib/near.ts` — legacy `sign()` 함수 정의 (단, `lib/chainSig.ts` production path는 chainsig.js `ChainSignatureContract.sign()`을 사용; `lib/near.ts`는 독립적으로 존재)
+  - x402 결제 트리거는 [§1.4 deposit tracking](./04-deposit-tracking.md) cron에서 이루어지고, 브로드캐스트 결과(tx hash)는 [§1.7 x402 client](./07-x402-client.md)에서 소비됨
 
 - **Dependencies (external):**
   - `v1.signer` (NEAR MPC 컨트랙트) — 모든 실제 서명 연산의 실행자

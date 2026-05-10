@@ -1,7 +1,7 @@
 # §1.5 1Click bridge (1Click 브리지)
 
 > **Cross-reference:** 이 문서는 PAL 코드에서 1Click을 *어떻게 호출하는지*만 다룬다.
-> 1Click이 *무엇인지* (Defuse Protocol, NEAR Intents, solver 네트워크, API surface 전체)는 §3.1(Task 10)에서 다룬다.
+> 1Click이 *무엇인지* (Defuse Protocol, NEAR Intents, solver 네트워크, API surface 전체)는 [§3.1 Zcash tool inventory](./zcash-tool-inventory.md)에서 다룬다.
 
 ---
 

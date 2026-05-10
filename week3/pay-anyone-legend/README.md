@@ -201,3 +201,34 @@ flowchart TD
 4. **swapWallet USDC 잔고 실제 확인** — `MPC_PATH = 'base-1'` 하드코딩으로 파생된 EVM 주소가 실제 Base mainnet에서 USDC를 수령하고 있는지, 여러 사용자의 USDC가 혼재하고 있는지 확인이 필요하다. *resolved by: `getEthereumAddressFromProxyAccount()` 실행 후 Base explorer 조회.*
 
 5. **1Click JWT 수수료 실제 값** — PAL README는 "0.1%"라고 하고 공식 문서는 "0.2%"라고 한다. 실제 quote 응답의 fee 필드를 비교하면 정확한 값을 확인할 수 있다. *resolved by: JWT 유무 조건에서 각각 `/v0/quote` 호출 후 fee 필드 비교.*
+
+---
+
+## 부록: Spec coverage matrix
+
+> **Task 14.4 검증 완료 (2026-05-11).** 모든 §3 deliverable 항목이 deep-dive 파일에 존재함을 확인.
+
+| Spec §3 bullet | Where it lives in the deep dive | Status |
+|---|---|---|
+| §0.1 What Anyone-Pay is trying to be | `README.md` §0.1 | ✓ |
+| §0.2 5-step user story | `README.md` §0.2 | ✓ |
+| §0.3 Architecture map | `README.md` §0.3 (Mermaid + ASCII fallback) | ✓ |
+| §0.4 Reading guide | `README.md` §0.4 | ✓ |
+| §1.1 Intent parser | [`01-intent-parser.md`](./01-intent-parser.md) | ✓ |
+| §1.2 Service registry | [`02-service-registry.md`](./02-service-registry.md) | ✓ |
+| §1.3 Z-address | [`03-z-address-generation.md`](./03-z-address-generation.md) | ✓ |
+| §1.4 Deposit tracking | [`04-deposit-tracking.md`](./04-deposit-tracking.md) | ✓ |
+| §1.5 1Click bridge | [`05-one-click-bridge.md`](./05-one-click-bridge.md) | ✓ |
+| §1.6 NEAR Chain Sig | [`06-near-chain-signatures.md`](./06-near-chain-signatures.md) | ✓ |
+| §1.7 x402 client | [`07-x402-client.md`](./07-x402-client.md) | ✓ |
+| §1.8 NEAR Rust contract | [`08-near-rust-contract.md`](./08-near-rust-contract.md) | ✓ |
+| §2.1 PAL vs Secure Legion / NLx402 | [`category-E-extraction.md`](./category-E-extraction.md) §2.1 | ✓ |
+| §2.2 Exact 402 → quote → MPC sign → execute call sequence | [`category-E-extraction.md`](./category-E-extraction.md) §2.2 | ✓ |
+| §2.3 Lift-and-use vs redo | [`category-E-extraction.md`](./category-E-extraction.md) §2.3 | ✓ |
+| §2.4 Differentiation room | [`category-E-extraction.md`](./category-E-extraction.md) §2.4 | ✓ |
+| §3.1 What 1Click is | [`zcash-tool-inventory.md`](./zcash-tool-inventory.md) §3.1 | ✓ |
+| §3.2 Outsourcing | [`zcash-tool-inventory.md`](./zcash-tool-inventory.md) §3.2 | ✓ |
+| §3.3 Z-address fake | [`zcash-tool-inventory.md`](./zcash-tool-inventory.md) §3.3 | ✓ |
+| §3.4 Inventory + alternatives | [`zcash-tool-inventory.md`](./zcash-tool-inventory.md) §3.4 | ✓ |
+
+All 20 rows are ✓. No ✗ or ⚠️ items found during verification.

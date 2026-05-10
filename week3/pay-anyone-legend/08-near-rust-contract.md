@@ -1,9 +1,9 @@
 # §1.8 NEAR Rust contract (NEAR Rust 컨트랙트)
 
 > **Cross-reference:**
-> - §1.7(`07-x402-client.md`) — x402 런타임 실행 경로는 TS `lib/chainSig.ts`에만 존재하며 Rust 컨트랙트는 전혀 관여하지 않음을 확립.
-> - §1.6(`06-near-chain-signatures.md`) — 프로덕션에서 NEAR MPC를 사용하는 것은 `v1.signer` 컨트랙트뿐이며, `anyone-pay.near` 컨트랙트는 호출되지 않음을 확립.
-> - §1.4(`04-deposit-tracking.md`) — 모든 결제 상태는 Supabase에 저장됨; NEAR 컨트랙트에 상태가 기록되지 않음을 확립.
+> - [§1.7 x402 client](./07-x402-client.md) — x402 런타임 실행 경로는 TS `lib/chainSig.ts`에만 존재하며 Rust 컨트랙트는 전혀 관여하지 않음을 확립.
+> - [§1.6 NEAR Chain Signatures](./06-near-chain-signatures.md) — 프로덕션에서 NEAR MPC를 사용하는 것은 `v1.signer` 컨트랙트뿐이며, `anyone-pay.near` 컨트랙트는 호출되지 않음을 확립.
+> - [§1.4 deposit tracking](./04-deposit-tracking.md) — 모든 결제 상태는 Supabase에 저장됨; NEAR 컨트랙트에 상태가 기록되지 않음을 확립.
 
 ---
 

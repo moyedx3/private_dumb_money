@@ -6,6 +6,18 @@
 
 ---
 
+## Summary
+
+- Total claims: 136
+- [x] confirmed: 117
+- [~] partial / refined: 16
+- [-] out of scope (live-deployment-only): 3
+- Remaining [ ]: 0
+
+The 3 live-deployment-only items are in the **Remaining work** section at the bottom: (1) `getAllServicesForPrompt` `require()` runtime behavior, (2) `data_drops` table existence in production Supabase, (3) ONE_CLICK_JWT fee confirmation via actual API call. All require a running deployment to resolve and are explicitly out of scope for static analysis.
+
+---
+
 ## File-to-Subsystem Index
 
 ```tagged-files

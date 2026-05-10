@@ -67,7 +67,7 @@ app/page.tsx → components/IntentsQR.tsx         [IntentsQR.tsx:186]
 
 - **Inputs:** 사용자 intent에서 추출된 `amount`(USDC), `chain`(base|solana), `recipient`(x402 수신자 EVM 주소)
 - **Outputs:** 1Click API가 반환한 deposit address 문자열 (실질적으로는 1Click solver가 제어하는 Zcash 수신 주소); Supabase row; QR 코드
-- **Dependencies (internal):** `lib/oneClick.ts` (`getSwapQuote`), `lib/depositTracking.ts` (`registerDeposit`), `lib/chainSig.ts` (`getEthereumAddressFromProxyAccount` — swap 완료 후 USDC를 받을 EVM 주소 파생에 사용)
+- **Dependencies (internal):** [§1.5 1Click bridge](./05-one-click-bridge.md) — `lib/oneClick.ts` (`getSwapQuote`), [§1.4 deposit tracking](./04-deposit-tracking.md) — `lib/depositTracking.ts` (`registerDeposit`), [§1.6 NEAR Chain Signatures](./06-near-chain-signatures.md) — `lib/chainSig.ts` (`getEthereumAddressFromProxyAccount` — swap 완료 후 USDC를 받을 EVM 주소 파생에 사용)
 - **Dependencies (external):** 1Click API (`https://1click.chaindefuser.com`), `@defuse-protocol/one-click-sdk-typescript@0.1.14`, Supabase
 
 ---

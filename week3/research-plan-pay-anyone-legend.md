@@ -129,9 +129,29 @@ Bottom-up. Stop and write notes per subsystem before moving on.
 These are written in the deep-dive doc as we encounter the answers:
 
 - Which x402 facilitator does Pay Anyone Legend actually call — Coinbase's Base facilitator, NLx402 (PCEF/Solana), or something else?
+
+> **Answer:** 외부 facilitator를 전혀 사용하지 않는다 — `lib/chainSig.ts:394`에서 `publicClient.sendRawTransaction()`으로 Base mainnet에 USDC `transferWithAuthorization`을 직접 브로드캐스트하며, Coinbase, NLx402, `x402.near` 어느 것도 호출하지 않는다 — see [§1.7 x402 client](week3/pay-anyone-legend/07-x402-client.md)
+
 - Is `app/api/intent/` the place where the 402 challenge → MPC sign → execute happens, or is that split across `lib/chainSig.ts` + `lib/oneClick.ts`?
+
+> **Answer:** `app/api/intent/` 엔드포인트는 존재하지 않는다; 표준 402 challenge/response 사이클 자체가 없으며, Vercel cron(`app/api/relayer/cronjob-check-deposits/route.ts:127`)이 1Click `SUCCESS` 감지 후 `signX402TransactionWithChainSignature()`(`lib/chainSig.ts:210`)를 호출하는 구조로, `lib/oneClick.ts`는 swap 상태 폴링만 담당한다 — see [§1.7 x402 client](week3/pay-anyone-legend/07-x402-client.md)
+
 - Does the NEAR Rust contract in `contract/` participate in the payment flow, or is it just service-registry / metadata?
+
+> **Answer:** 런타임 결제 흐름에 전혀 참여하지 않는다 — `rg`로 확인 시 어떤 TypeScript 파일도 `anyone-pay.near`의 메서드를 호출하지 않으며, `execute_x402_payment()`, `verify_deposit()`, `mark_funded()` 등 핵심 메서드는 완전한 dead code다 — see [§1.8 NEAR Rust contract](week3/pay-anyone-legend/08-near-rust-contract.md)
+
 - Is the Supabase deposit tracking actually verifying chain state (via lightwalletd or RPC), or just trusting a webhook from 1Click?
+
+> **Answer:** Zcash 체인을 직접 조회하지 않고 1Click SDK `getExecutionStatus(depositAddress)`(폴링, 웹훅 아님) 결과를 blind trust한다 — `app/api/relayer/cronjob-check-deposits/route.ts:34`, `lib/oneClick.ts:141`에서 확인되며 lightwalletd/Zebra RPC 호출 코드는 전혀 없다 — see [§1.4 deposit tracking](week3/pay-anyone-legend/04-deposit-tracking.md)
+
 - What does `lib/kdf.ts` do? Key derivation for what — chain-sig path derivation, or something Zcash-related?
+
+> **Answer:** NEAR Chain Signatures의 epsilon derivation 공식(`sha3_256("near-mpc-recovery v0.1.0 epsilon derivation:${signerId},${path}")`)으로 secp256k1 child key를 파생하는 NEAR MPC path derivation 유틸리티이며, Zcash와는 완전히 무관하다 — `lib/kdf.ts:26-50`, `bech32`는 Cosmos 주소에만 사용(`lib/kdf.ts:163-165`) — see [§1.6 NEAR Chain Signatures](week3/pay-anyone-legend/06-near-chain-signatures.md)
+
 - Is there any handling for 402 retries / refunds, or is it fire-and-hope?
+
+> **Answer:** cron 레벨 재시도(1분 주기, `!tracking.signedPayload` 조건 재진입)만 존재하고 환불 메커니즘은 없다 — `POST /api/relayer/refund` 엔드포인트가 DEPLOY.md에 문서화되어 있으나 파일이 존재하지 않으며, x402 실패 시 USDC가 `swapWallet`에 영구적으로 묶인다 — see [§1.4 deposit tracking](week3/pay-anyone-legend/04-deposit-tracking.md), [§1.7 x402 client](week3/pay-anyone-legend/07-x402-client.md)
+
 - Verify the week2 claim that z-address generation is `crypto.getRandomValues + 'zs1' prefix` — find the exact file:line, or correct the claim if the code has moved on.
+
+> **Answer:** 해당 패턴은 존재하지 않는다(week2 claim 부분 수정) — deposit address는 1Click API `/v0/quote` 응답의 `depositAddress` 필드를 그대로 pass-through하며(`lib/oneClick.ts:126`, `app/api/relayer/register-deposit/route.ts:66`), `zs1test123`/`zs1test123456789`는 `contract/deploy.sh:54`, `contract/test-contract.sh:14`의 shell test literal에 불과하다 — see [§1.3 z-address generation](week3/pay-anyone-legend/03-z-address-generation.md)
