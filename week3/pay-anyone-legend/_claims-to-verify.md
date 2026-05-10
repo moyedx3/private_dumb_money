@@ -64,12 +64,12 @@ scripts/validate-sql.ts                   → shared
 - [x] AI-Powered Intent Recognition: natural language processing to understand payment intents — CONFIRMED: `analyzePromptWithNearAI` in `lib/nearAI.ts:29` calls pgvector embedding search (`lib/serviceRegistry.ts:37`) then LLM chat completion (`lib/nearAI.ts:112`) with `gpt-4o-mini` (OpenAI) or `deepseek-chat-v3-0324` (NEAR AI Cloud) — §1.1
 - [x] Semantic Service Matching: AI-powered search matches user queries to services (e.g., "Pay onlyfan" → OnlyFans) — CONFIRMED: `searchServicesSemantic` in `lib/serviceRegistry.ts:52-96` calls `match_services` RPC via `supabase.rpc('match_services', {...})` at `lib/serviceRegistry.ts:68`. pgvector `<=>` cosine distance operator is used in `supabase-setup.sql:69-74` — §1.2
 - [x] NEAR Chain Signatures: MPC-based key management for cross-chain transaction signing — CONFIRMED: `lib/chainSig.ts:24-27` — `new contracts.ChainSignatureContract({ networkId, contractId: 'v1.signer' })`. `chainSignatureContract.sign()` called at `lib/chainSig.ts:147` (EIP-712 hash) and `lib/chainSig.ts:372` (EVM tx hash). chainsig.js handles the cross-contract call to `v1.signer.sign()`. — §1.6
-- [ ] x402 Payment Protocol: HTTP 402 standard with automatic payment verification and execution — verify 402 challenge/response cycle exists — app/api/content/get-url/route.ts, scripts/test-sign-x402-transaction.js — §1.7
-- [ ] Server-side cronjobs handle payment verification and execution — verify cronjob exists in vercel.json and does deposit + x402 execution — app/api/relayer/cronjob-check-deposits/route.ts — §1.4
-- [ ] Polling system tracks deposit and payment status — verify polling loop or status endpoint exists — lib/depositTracking.ts, app/api/relayer/check-deposit/route.ts — §1.4
+- [~] x402 Payment Protocol: HTTP 402 standard with automatic payment verification and execution — PARTIALLY CORRECT / MISLEADING: PAL does NOT perform a standard HTTP 402 challenge/response cycle. There is no code path where a server issues `402 Payment Required` with `paymentRequirements`, PAL parses it, and re-requests with `X-PAYMENT` header. Instead, cron pre-executes a USDC `transferWithAuthorization` on Base mainnet via NEAR MPC (`lib/chainSig.ts:394`), stores the resulting tx hash, and the UI later sends this tx hash as `X-PAYMENT` header to the content server (`app/content/page.tsx:144`). The "402 dance" is replaced by post-hoc on-chain proof submission. — §1.7
+- [x] Server-side cronjobs handle payment verification and execution — CONFIRMED: `vercel.json:9` schedule `*/1 * * * *`; `app/api/relayer/cronjob-check-deposits/route.ts:15` polls 1Click status, gates on `normalizedStatus === 'SUCCESS' && !tracking.signedPayload && !tracking.x402Executed` (`route.ts:47`), then calls `signX402TransactionWithChainSignature()` (`route.ts:127`) — §1.4 §1.7
+- [x] Polling system tracks deposit and payment status — CONFIRMED: `lib/depositTracking.ts:365` — `getDepositsWithDeadlineRemaining()` provides cron's polling set; `app/api/relayer/check-deposit/route.ts:17` — `checkDepositStatus()` polls 1Click SDK `getExecutionStatus`; UI polls `POST /api/relayer/check-deposit` to detect confirmation — §1.4
 - [ ] URL-Based State Persistence: Bookmarkable deposit links restore full payment state — verify payment state is encoded in URL — app/page.tsx, app/receipt/page.tsx — §0
 - [~] Semantic similarity threshold default is 0.6 — PARTIALLY CORRECT: `findBestService` default param is 0.7 (`lib/serviceRegistry.ts:168`), but `analyzePromptWithNearAI` explicitly passes 0.6 when calling it (`lib/nearAI.ts:32`). The effective threshold for intent parsing is 0.6, but the library default is 0.7 — §1.1 §1.2
-- [ ] NEAR contract address for x402 facilitator is x402.near — verify env var X402_FACILITATOR and any call to it — contract/src/lib.rs, lib/chainSig.ts — §1.8
+- [~] NEAR contract address for x402 facilitator is x402.near — PARTIALLY CORRECT / NEVER CALLED: `contract/src/lib.rs:43` has `x402_facilitator: AccountId::try_from("x402.near".to_string()).unwrap()` as default. `contract/deploy.sh:15` confirms `X402_FACILITATOR="x402.near"`. `execute_x402_payment()` in `lib.rs:126` calls `Promise::new(self.x402_facilitator.clone()).function_call("pay", ...)`. HOWEVER: no TypeScript code calls this Rust contract method. The actual x402 execution path is `lib/chainSig.ts:394` (direct Base broadcast), entirely bypassing the NEAR contract. — §1.7 §1.8
 - [x] NEAR MPC contract used is v1.signer — CONFIRMED: `lib/chainSig.ts:21` — `const contractId = process.env.NEAR_PROXY_CONTRACT_ID || 'v1.signer'`. `lib/near.ts:24` — same env var read. Default is `v1.signer` in both files. — §1.6
 - [x] ethers v5.7.2 is used for Ethereum interactions — CONFIRMED: `package.json:22` — `"ethers": "^5.7.2"`. Used in `lib/chainSig.ts:4` for EIP-712 hash, BigNumber, ABI encoding, address checksum. Also in `lib/kdf.ts:13` for `ethers.utils.getAddress()`. — §1.6
 - [x] chainsig.js is used as EVM chain adapter — CONFIRMED: `lib/chainSig.ts:7` — `import { contracts, chainAdapters } from 'chainsig.js'`. `chainAdapters.evm.EVM` created at `lib/chainSig.ts:50-53`. Used for `deriveAddressAndPublicKey`, `prepareTransactionForSigningLegacy`, `finalizeTransactionSigningLegacy`. Version `^1.1.14` in `package.json:21`. — §1.6
@@ -83,10 +83,10 @@ scripts/validate-sql.ts                   → shared
 
 ### From SETUP.md
 
-- [ ] X402_FACILITATOR env var is set to x402.near — verify it is read and used in code — lib/chainSig.ts or contract/ — §1.7 §1.8
+- [x] X402_FACILITATOR env var is set to x402.near — CONFIRMED (deploy.sh only, not read in TS): `contract/deploy.sh:15` — `X402_FACILITATOR="x402.near"` used in `near contract deploy ... json-args "{\"x402_facilitator\":\"$X402_FACILITATOR\",...}"`. NOT read by any TypeScript file — no `process.env.X402_FACILITATOR` reference exists in `lib/` or `app/`. The env var exists only in the shell deploy script. — §1.7 §1.8
 - [ ] NEXT_PUBLIC_INTENTS_CONTRACT env var set to intents.near — verify it is used in TS code — lib/near.ts or contract/ — §1.8
 - [ ] NEXT_PUBLIC_CONTRACT_ID env var set to anyone-pay.near — verify it points to the NEAR Rust contract — lib/near.ts — §1.8
-- [ ] Contract is deployed to anyone-pay.near — verify deploy.sh target account — contract/deploy.sh — §1.8
+- [x] Contract is deployed to anyone-pay.near — CONFIRMED: `contract/deploy.sh:14` — `ACCOUNT_ID="anyone-pay.near"`. `near contract deploy $ACCOUNT_ID ... network-config mainnet` — §1.8
 
 ### From DEPLOY.md
 
@@ -98,15 +98,15 @@ scripts/validate-sql.ts                   → shared
 - [x] POST /api/relayer/refund — REFUTED: No `app/api/relayer/refund/route.ts` file exists. The refund endpoint claimed by DEPLOY.md is not implemented. Refund logic is entirely absent from the codebase. — §1.4
 - [x] GET /api/relayer/cronjob-check-deposits — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:15` exports `GET(request)`. Polls `getDepositsWithDeadlineRemaining()`, calls `checkSwapStatus()` per deposit, executes `signX402TransactionWithChainSignature()` on SUCCESS, saves tx hash to `signed_payload` column — §1.4 §1.7
 - [ ] Relayer is integrated into Next.js API routes (no separate Fly.io deployment) — verify no fly.toml or separate server — §0
-- [ ] Contract initialized with args x402_facilitator and intents_contract — verify init call in deploy.sh — contract/deploy.sh — §1.8
+- [x] Contract initialized with args x402_facilitator and intents_contract — CONFIRMED: `contract/deploy.sh:31` — `near contract deploy $ACCOUNT_ID ... with-init-call new json-args "{\"x402_facilitator\":\"$X402_FACILITATOR\",\"intents_contract\":\"$INTENTS_CONTRACT\"}"`. `contract/src/lib.rs:51–57` — `fn new(x402_facilitator: AccountId, intents_contract: AccountId)` is the init function. — §1.8
 
 ### From DEPLOY_CONTRACT.md
 
-- [ ] Contract method get_intent(intent_id: String) — view method exists — contract/src/lib.rs — §1.8
-- [ ] Contract method create_intent(intent_id, intent_type, deposit_address, amount, redirect_url) — change method exists — contract/src/lib.rs — §1.8
-- [ ] Contract method mark_funded(intent_id) — marks intent as funded, caller is "relayer only" — verify caller restriction — contract/src/lib.rs — §1.8
-- [ ] Contract method execute_x402_payment(intent_id, amount, recipient) — executes x402 payment on-chain — verify implementation — contract/src/lib.rs — §1.7 §1.8
-- [ ] Contract method verify_deposit(intent_id) — verifies deposit via NEAR Intents — verify implementation and what "verify via NEAR Intents" means — contract/src/lib.rs — §1.4 §1.8
+- [x] Contract method get_intent(intent_id: String) — CONFIRMED: `contract/src/lib.rs:153` — `pub fn get_intent(&self, intent_id: String) -> Option<Intent>`. View method. Returns `Option<Intent>` from `UnorderedMap`. — §1.8
+- [x] Contract method create_intent(intent_id, intent_type, deposit_address, amount, redirect_url) — CONFIRMED: `contract/src/lib.rs:60` — `pub fn create_intent(&mut self, intent_id: String, intent_type: String, deposit_address: String, amount: U128, redirect_url: String) -> Intent`. No caller restriction. — §1.8
+- [~] Contract method mark_funded(intent_id) — marks intent as funded, caller is "relayer only" — PARTIALLY CORRECT: Method exists at `contract/src/lib.rs:158`. Decorated with `#[private]` (`lib.rs:157`), which in NEAR means "only callable by the contract itself (self cross-call), NOT by an external relayer." The DEPLOY_CONTRACT.md claim that "caller is relayer only" is incorrect — `#[private]` restricts to self-calls only, not an external relayer account. — §1.8
+- [x] Contract method execute_x402_payment(intent_id, amount, recipient) — CONFIRMED (method exists): `contract/src/lib.rs:105`. Calls `Promise::new(self.x402_facilitator.clone()).function_call("pay", ...)` (`lib.rs:126–138`). Requires `intent.status == IntentStatus::Funded` (`lib.rs:113`). However: **no TypeScript code calls this method in the production x402 flow** — confirmed by absence of any `execute_x402_payment` reference in `lib/` or `app/`. Method is a design placeholder. — §1.7 §1.8
+- [~] Contract method verify_deposit(intent_id) — verifies deposit via NEAR Intents — PARTIALLY CORRECT / BROKEN: Method exists at `contract/src/lib.rs:84`. Calls `Promise::new(self.intents_contract.clone()).function_call("mt_batch_balance_of", ...)` but immediately returns `true` without awaiting the Promise result (`lib.rs:100`). The asynchronous Promise result is never captured. Verification is a no-op — always returns true. — §1.4 §1.8
 - [ ] Contract is deployed to mainnet (anyone-pay.near) — verify target in deploy.sh — contract/deploy.sh — §1.8
 
 ### From SUPABASE_SETUP.md
@@ -272,4 +272,32 @@ scripts/validate-sql.ts                   → shared
 
 - [x] **`lib/chainSig.ts` broadcasts the tx itself — §1.7 (x402 client) does NOT receive a signed payload to broadcast** — CONFIRMED: `lib/chainSig.ts:394-401` — `publicClient.sendRawTransaction()` called inside `signX402TransactionWithChainSignature()`. The x402 payment is complete (on-chain) before the cronjob function receives the tx hash. — §1.6 §1.7
 
-- [ ] **Is the x402 flow EIP-3009 (transferWithAuthorization) or standard EIP-712?** — Both: `lib/chainSig.ts:241-265` constructs a `TransferWithAuthorization` EIP-712 typed struct. The USDC `transferWithAuthorization` function is the settlement mechanism. This is EIP-3009 built on EIP-712. Task 7 (§1.7) must verify what the x402 facilitator/server expects vs what PAL actually sends. — §1.7
+- [x] **Is the x402 flow EIP-3009 (transferWithAuthorization) or standard EIP-712?** — RESOLVED: Both. `lib/chainSig.ts:241-265` constructs a `TransferWithAuthorization` EIP-712 typed struct. The USDC `transferWithAuthorization` function is the settlement mechanism. This is EIP-3009 built on EIP-712. PAL does NOT use an external x402 facilitator — it broadcasts the USDC transferWithAuthorization directly to Base mainnet via `publicClient.sendRawTransaction()` (`lib/chainSig.ts:394`). The `X-PAYMENT` header sent to the content server contains the Base tx hash, not a signed authorization payload. — §1.7
+
+---
+
+### NEW claims discovered while reading x402 client (Task 7)
+
+#### §1.7 — x402 client (new findings)
+
+- [x] **No external x402 facilitator is used** — CONFIRMED: `lib/chainSig.ts` does not contain any HTTP request to `x402.org`, `api.cdp.coinbase.com`, or any NLx402/PCEF endpoint. The payment is executed by calling `publicClient.sendRawTransaction()` on Base mainnet directly (`lib/chainSig.ts:394`). The NEAR Rust contract's `execute_x402_payment()` (which DOES call `x402.near`) is never invoked from TypeScript. — §1.7
+
+- [x] **Settlement chain is Base mainnet (chain ID 8453), settlement asset is USDC** — CONFIRMED: `lib/chainSig.ts:226` — `const baseChainId = 8453`. USDC contract `0x833589fcd6edb6e08f4c7c32d4f71b54bda02913` (`lib/chainSig.ts:230`). `ethers.utils.parseUnits(quote.maxAmountRequired, 6)` — 6 decimals for USDC (`lib/chainSig.ts:227`). — §1.7
+
+- [x] **HTTP 402 challenge/response cycle does NOT exist** — CONFIRMED: No code path issues a `paymentRequirements` 402 challenge from PAL's server to PAL's client. `app/api/content/get-url/route.ts:52` returns `{ status: 402 }` only as an internal "payment not yet executed" signal — it does not include `paymentRequirements` field. Content page sends `X-PAYMENT` header to `redirectUrl` (external server), not back to PAL. — §1.7
+
+- [x] **`X-PAYMENT` header value is the Base Ethereum tx hash (not a signed EIP-3009 payload)** — CONFIRMED: `app/content/page.tsx:144` — `'X-PAYMENT': signedPayload` where `signedPayload` is retrieved from `get-url/route.ts:100` → `tracking.signedPayload` → `cronjob-check-deposits/route.ts:136` → `transactionHash` (return value of `sendRawTransaction`). — §1.7
+
+- [x] **`payTo` field is reliably `tracking.recipient` in practice** — CONFIRMED: `cronjob-check-deposits/route.ts:85` — `quote?.payTo || tracking.recipient || quote?.recipient`. Since 1Click `/v0/quote` response does not include `payTo`, effective path is always `tracking.recipient`. This is set at `register-deposit/route.ts:114` from the AI-parsed `receivingAddress`. — §1.7
+
+- [x] **gasPrice 0.1 gwei and gasLimit 150,000 are hardcoded** — CONFIRMED: `lib/chainSig.ts:71` — `ethers.utils.parseUnits('0.1', 'gwei')` (only fallback path but always used per the function structure). `lib/chainSig.ts:351` — `const gasLimit = BigNumber.from(150000)`. No dynamic gas estimation. — §1.7
+
+#### §1.8 — Rust contract (new findings from Task 7 cross-examination)
+
+- [x] **NEAR Rust contract plays NO runtime role in the x402 client flow** — CONFIRMED: `rg -n "execute_x402_payment\|anyone-pay\.near\|NEAR_PROXY_CONTRACT_ID" --type ts app/ lib/` finds no calls to `execute_x402_payment`. The TS x402 path goes: `cronjob-check-deposits/route.ts:125` → `lib/chainSig.ts:210` → Base `sendRawTransaction`. Rust contract is bypassed entirely. — §1.7 §1.8
+
+- [x] **`mark_funded()` uses `#[private]` which means self-call only, NOT external relayer** — CONFIRMED: `contract/src/lib.rs:157` — `#[private]` in NEAR SDK means `env::predecessor_account_id() == env::current_account_id()` assertion. DEPLOY_CONTRACT.md's "called by relayer only" description is incorrect. No TS code calls `mark_funded` at all. — §1.8
+
+- [x] **`verify_deposit()` is a broken no-op** — CONFIRMED: `contract/src/lib.rs:84–101`. Creates a Promise to call `intents.near.mt_batch_balance_of()` but does not use `.then()` to capture the async result. Returns `true` unconditionally (`lib.rs:100`). The Promise is fire-and-forget; verification never actually verifies. — §1.8
+
+- [x] **Intent struct has 8 fields: id, user, intent_type, deposit_address, amount, status, redirect_url, created_at** — CONFIRMED: `contract/src/lib.rs:9–18`. `IntentStatus` enum: `Pending`, `Funded`, `Executing`, `Completed`, `Failed` (`lib.rs:20–28`). — §1.8
