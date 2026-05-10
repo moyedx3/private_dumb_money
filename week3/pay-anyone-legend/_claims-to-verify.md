@@ -61,22 +61,22 @@ scripts/validate-sql.ts                   → shared
 
 - [ ] Zcash shielded transactions hide amounts, sender, and recipient — verify if real ZK proof execution is in the codebase or if it delegates to 1Click — lib/oneClick.ts, components/IntentsQR.tsx — §1.5 §1.3
 - [ ] Automatic bridging from Zcash to Base/Solana via 1-Click API — verify 1Click integration exists and targets Base/Solana — lib/oneClick.ts — §1.5
-- [ ] AI-Powered Intent Recognition: natural language processing to understand payment intents — verify there is an LLM/embedding call in the intent parsing pipeline — lib/intentParser.ts, lib/nearAI.ts, app/api/parse-intent/route.ts — §1.1
+- [x] AI-Powered Intent Recognition: natural language processing to understand payment intents — CONFIRMED: `analyzePromptWithNearAI` in `lib/nearAI.ts:29` calls pgvector embedding search (`lib/serviceRegistry.ts:37`) then LLM chat completion (`lib/nearAI.ts:112`) with `gpt-4o-mini` (OpenAI) or `deepseek-chat-v3-0324` (NEAR AI Cloud) — §1.1
 - [ ] Semantic Service Matching: AI-powered search matches user queries to services (e.g., "Pay onlyfan" → OnlyFans) — verify pgvector similarity search is called — lib/serviceRegistry.ts — §1.2
 - [ ] NEAR Chain Signatures: MPC-based key management for cross-chain transaction signing — verify v1.signer is called for tx signing — lib/chainSig.ts, lib/near.ts — §1.6
 - [ ] x402 Payment Protocol: HTTP 402 standard with automatic payment verification and execution — verify 402 challenge/response cycle exists — app/api/content/get-url/route.ts, scripts/test-sign-x402-transaction.js — §1.7
 - [ ] Server-side cronjobs handle payment verification and execution — verify cronjob exists in vercel.json and does deposit + x402 execution — app/api/relayer/cronjob-check-deposits/route.ts — §1.4
 - [ ] Polling system tracks deposit and payment status — verify polling loop or status endpoint exists — lib/depositTracking.ts, app/api/relayer/check-deposit/route.ts — §1.4
 - [ ] URL-Based State Persistence: Bookmarkable deposit links restore full payment state — verify payment state is encoded in URL — app/page.tsx, app/receipt/page.tsx — §0
-- [ ] Semantic similarity threshold default is 0.6 — verify threshold value in code — lib/serviceRegistry.ts — §1.2
+- [~] Semantic similarity threshold default is 0.6 — PARTIALLY CORRECT: `findBestService` default param is 0.7 (`lib/serviceRegistry.ts:168`), but `analyzePromptWithNearAI` explicitly passes 0.6 when calling it (`lib/nearAI.ts:32`). The effective threshold for intent parsing is 0.6, but the library default is 0.7 — §1.1 §1.2
 - [ ] NEAR contract address for x402 facilitator is x402.near — verify env var X402_FACILITATOR and any call to it — contract/src/lib.rs, lib/chainSig.ts — §1.8
 - [ ] NEAR MPC contract used is v1.signer — verify NEAR_PROXY_CONTRACT_ID usage — lib/near.ts, lib/chainSig.ts — §1.6
 - [ ] ethers v5.7.2 is used for Ethereum interactions — verify in package.json — §1.6
 - [ ] chainsig.js is used as EVM chain adapter — verify import/usage — lib/chainSig.ts — §1.6
 - [ ] 1-Click API base URL is https://api.1click.fi — verify ONE_CLICK_API_URL env usage — lib/oneClick.ts — §1.5
 - [ ] pgvector is used for semantic search — verify the vector extension and match_services function — lib/supabase.ts, lib/serviceRegistry.ts — §1.2
-- [ ] OpenAI is used for embeddings — verify OpenAI client creation and embedding model call — lib/serviceRegistry.ts, lib/intentParser.ts — §1.1 §1.2
-- [ ] NEAR AI Cloud is used for intent analysis — verify NEAR_AI_API_KEY usage — lib/nearAI.ts — §1.1
+- [x] OpenAI is used for embeddings — CONFIRMED: `lib/serviceRegistry.ts:6-8` creates an `OpenAI` client; `lib/serviceRegistry.ts:37-41` calls `openai.embeddings.create({ model: 'text-embedding-3-small', input: text })` — §1.1 §1.2
+- [~] NEAR AI Cloud is used for intent analysis — PARTIALLY CORRECT: `NEAR_AI_API_KEY` is read at `lib/nearAI.ts:7`, and if `OPENAI_API_KEY` is also set, OpenAI takes priority (`lib/nearAI.ts:7-11`). The codebase uses `openai` npm package for both; NEAR AI Cloud endpoint (`https://cloud-api.near.ai/v1`) is only used when `OPENAI_API_KEY` is absent. Comment says "TEMPORARILY using OpenAI for testing" (`lib/nearAI.ts:3`) — §1.1
 - [ ] Supabase is used for both service storage and deposit tracking — verify two separate tables/schemas exist — supabase-setup.sql, supabase-deposit-tracking.sql — §1.2 §1.4
 - [ ] QR Code payments: simple QR code scanning for Zcash deposits — verify QR code generation component — components/IntentsQR.tsx — §1.3
 - [ ] ONE_CLICK_JWT reduces swap fees (without JWT incurs 0.1% fee) — verify JWT is passed to 1Click calls — lib/oneClick.ts — §1.5
@@ -138,3 +138,14 @@ scripts/validate-sql.ts                   → shared
 
 - [ ] deposit_tracking table primary key is deposit_address (TEXT) — verify in supabase-deposit-tracking.sql — §1.4
 - [ ] deposit_tracking table does NOT require vector extension — verify SQL file — §1.4
+
+---
+
+### NEW claims discovered while reading intent parser (Task 1)
+
+#### §1.1 — Intent parser
+
+- [ ] The OpenAI client in `lib/serviceRegistry.ts` reads EITHER `OPENAI_API_KEY` or `NEAR_AI_API_KEY` as its API key (`lib/serviceRegistry.ts:8`); confirm which key is actually required for the service registry's embedding calls in practice — §1.2
+- [ ] `getAllServicesForPrompt` at `lib/nearAI.ts:216` uses a dynamic `require('./serviceRegistry')` (CommonJS inside ESM); verify that this does not cause a runtime error in Next.js serverless functions — §1.1
+- [ ] `detectChainForDomain` in `lib/nearAI.ts:279` falls back to `'ethereum'` as default chain, but the rest of the codebase only supports `'base'` and `'solana'`; confirm whether any code path actually calls this function in production and what happens when it returns `'ethereum'` — §1.1
+- [ ] `lib/nearAI.ts` has hardcoded `bridgeFrom: 'zcash'` in both the service match path (`lib/nearAI.ts:44`) and the LLM system prompt example JSON (`lib/nearAI.ts:94`); verify that all intent paths ultimately produce `bridgeFrom: 'zcash'` — §1.1 §1.3
