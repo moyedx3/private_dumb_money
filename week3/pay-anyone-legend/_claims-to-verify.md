@@ -59,7 +59,7 @@ scripts/validate-sql.ts                   → shared
 
 ### From README.md
 
-- [ ] Zcash shielded transactions hide amounts, sender, and recipient — verify if real ZK proof execution is in the codebase or if it delegates to 1Click — lib/oneClick.ts, components/IntentsQR.tsx — §1.5 §1.3
+- [x] Zcash shielded transactions hide amounts, sender, and recipient — REFUTED AS STATED: PAL performs no ZK proof execution. The deposit address is returned by 1Click API (`lib/oneClick.ts:126`); PAL only QR-displays it. All shielded tx logic (if any) is entirely inside 1Click (Defuse Protocol). The README claim is misleading — §1.3 §1.5
 - [ ] Automatic bridging from Zcash to Base/Solana via 1-Click API — verify 1Click integration exists and targets Base/Solana — lib/oneClick.ts — §1.5
 - [x] AI-Powered Intent Recognition: natural language processing to understand payment intents — CONFIRMED: `analyzePromptWithNearAI` in `lib/nearAI.ts:29` calls pgvector embedding search (`lib/serviceRegistry.ts:37`) then LLM chat completion (`lib/nearAI.ts:112`) with `gpt-4o-mini` (OpenAI) or `deepseek-chat-v3-0324` (NEAR AI Cloud) — §1.1
 - [x] Semantic Service Matching: AI-powered search matches user queries to services (e.g., "Pay onlyfan" → OnlyFans) — CONFIRMED: `searchServicesSemantic` in `lib/serviceRegistry.ts:52-96` calls `match_services` RPC via `supabase.rpc('match_services', {...})` at `lib/serviceRegistry.ts:68`. pgvector `<=>` cosine distance operator is used in `supabase-setup.sql:69-74` — §1.2
@@ -73,12 +73,12 @@ scripts/validate-sql.ts                   → shared
 - [ ] NEAR MPC contract used is v1.signer — verify NEAR_PROXY_CONTRACT_ID usage — lib/near.ts, lib/chainSig.ts — §1.6
 - [ ] ethers v5.7.2 is used for Ethereum interactions — verify in package.json — §1.6
 - [ ] chainsig.js is used as EVM chain adapter — verify import/usage — lib/chainSig.ts — §1.6
-- [ ] 1-Click API base URL is https://api.1click.fi — verify ONE_CLICK_API_URL env usage — lib/oneClick.ts — §1.5
+- [~] 1-Click API base URL is https://api.1click.fi — PARTIALLY CORRECT (URL DIFFERS): actual default is `https://1click.chaindefuser.com` at `lib/oneClick.ts:7`. `ONE_CLICK_API_URL` env var overrides it. The domain `1click.fi` is NOT used — §1.5
 - [x] pgvector is used for semantic search — CONFIRMED: `CREATE EXTENSION IF NOT EXISTS vector` at `supabase-setup.sql:5`; `match_services` function defined at `supabase-setup.sql:36-78` uses `vector(1536)` type and `<=>` cosine distance; `supabase.rpc('match_services', ...)` called at `lib/serviceRegistry.ts:68` — §1.2
 - [x] OpenAI is used for embeddings — CONFIRMED: `lib/serviceRegistry.ts:6-8` creates an `OpenAI` client; `lib/serviceRegistry.ts:37-41` calls `openai.embeddings.create({ model: 'text-embedding-3-small', input: text })` — §1.1 §1.2
 - [~] NEAR AI Cloud is used for intent analysis — PARTIALLY CORRECT: `NEAR_AI_API_KEY` is read at `lib/nearAI.ts:7`, and if `OPENAI_API_KEY` is also set, OpenAI takes priority (`lib/nearAI.ts:7-11`). The codebase uses `openai` npm package for both; NEAR AI Cloud endpoint (`https://cloud-api.near.ai/v1`) is only used when `OPENAI_API_KEY` is absent. Comment says "TEMPORARILY using OpenAI for testing" (`lib/nearAI.ts:3`) — §1.1
 - [x] Supabase is used for both service storage and deposit tracking — CONFIRMED: `payment_services` table in `supabase-setup.sql:8-22` (service registry); `deposit_tracking` table in `supabase-deposit-tracking.sql:5-25` (deposit tracking). Different Supabase clients: anon key (`lib/supabase.ts`) for service registry; service role key (`lib/supabase-server.ts`) for deposit tracking — §1.2 §1.4
-- [ ] QR Code payments: simple QR code scanning for Zcash deposits — verify QR code generation component — components/IntentsQR.tsx — §1.3
+- [x] QR Code payments: simple QR code scanning for Zcash deposits — CONFIRMED: `<QRCodeSVG value={depositAddress} size={220} level="H">` at `components/IntentsQR.tsx:186`. The QR encodes only the raw address string; no ZIP-321 URI (`zcash:zs1...?amount=...`) format is used — §1.3
 - [ ] ONE_CLICK_JWT reduces swap fees (without JWT incurs 0.1% fee) — verify JWT is passed to 1Click calls — lib/oneClick.ts — §1.5
 
 ### From SETUP.md
@@ -165,3 +165,31 @@ scripts/validate-sql.ts                   → shared
 - [x] `deposit_tracking` table has `quote_data JSONB`, `deadline TIMESTAMP WITH TIME ZONE`, `signed_payload TEXT` columns — CONFIRMED: `supabase-deposit-tracking.sql:22-24` — §1.4
 - [x] `deposit_tracking` table `deposit_address TEXT PRIMARY KEY` — CONFIRMED: `supabase-deposit-tracking.sql:6` — §1.4
 - [x] `deposit_tracking` table RLS is disabled — CONFIRMED: `ALTER TABLE deposit_tracking DISABLE ROW LEVEL SECURITY` at `supabase-deposit-tracking.sql:52` — §1.4
+
+---
+
+### NEW claims discovered while reading z-address generation (Task 3)
+
+#### §1.3 — Z-address generation (DEFINITIVE VERIFICATION)
+
+- [x] **Spec §7 open question — "Verify the week2 claim that z-address generation is `crypto.getRandomValues + 'zs1' prefix`"** — VERDICT: **Partially Refuted / Corrected.** The code does NOT use `crypto.getRandomValues` + `'zs1'` prefix to synthesize a z-address. No such pattern exists in any `.ts`/`.js`/`.tsx` file. Instead, deposit address is **fully outsourced (Category C)** to the 1Click API: `lib/oneClick.ts:126` extracts `data.depositAddress` from the `/v0/quote` API response and `app/api/relayer/register-deposit/route.ts:66` re-extracts it. The `zs1test123` strings found in `contract/deploy.sh:54` and `contract/test-contract.sh:14` are hardcoded shell test literals for the NEAR contract's `create_intent()` method — they are not produced by any JavaScript runtime code path. Week2's "얕다 (shallow)" characterization is correct; the mechanism is C (outsourced), not B (synthetic mock). — §1.3 §7
+
+- [x] **No Zcash native library imported** — CONFIRMED: `package.json` contains zero Zcash cryptography packages. `bech32@2.0.0` is present but used exclusively for cosmos/XRP Ledger address derivation in `lib/kdf.ts:164-165`. `bs58check@4.0.0` and `js-sha3@0.9.3` are similarly Zcash-unrelated. — §1.3 §3.4
+
+- [x] **QR code carries raw address string only, not ZIP-321 URI** — CONFIRMED: `components/IntentsQR.tsx:186` passes `value={depositAddress}` (a plain string) to `<QRCodeSVG>`. No `zcash:` URI scheme or ZIP-321 `?amount=` parameter is constructed anywhere in the codebase. — §1.3
+
+- [x] **deposit_address (Supabase PK) is the 1Click order tracking key** — CONFIRMED: `lib/oneClick.ts:141` calls `OneClickService.getExecutionStatus(depositAddress)` using the address as the lookup key. `app/api/relayer/cronjob-check-deposits/route.ts:34` iterates all deposits and calls `checkSwapStatus(depositAddress)`. The address doubles as both the Zcash receive address AND the 1Click swap order ID. — §1.3 §1.4 §1.5
+
+#### §1.5 — 1Click integration (new observations)
+
+- [x] **1Click API actual base URL is `https://1click.chaindefuser.com`** (not `https://api.1click.fi` as claimed) — CONFIRMED: `lib/oneClick.ts:7` sets `ONE_CLICK_API_URL = process.env.ONE_CLICK_API_URL || 'https://1click.chaindefuser.com'`. This is the Defuse Protocol / chaindefuser domain, distinct from the claimed `1click.fi`. — §1.5
+
+- [x] **1Click SDK used: `@defuse-protocol/one-click-sdk-typescript@0.1.14`** — CONFIRMED: `package.json` and `lib/oneClick.ts:3-4` import `OneClickService` and `OpenAPI` from this package. — §1.5
+
+- [x] **Zcash asset ID used with 1Click is `nep141:zec.omft.near`** — CONFIRMED: `lib/oneClick.ts:178` defines `ASSETS.ZCASH = 'nep141:zec.omft.near'`. This is the NEAR Intents (Defuse) wrapped ZEC token ID. — §1.5
+
+#### §1.4 — Deposit tracking (new observations)
+
+- [x] **`signedPayload` column stores the Ethereum transaction hash (not a Base64 payload)** — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:135` calls `updateDepositTracking(depositAddress, { signedPayload: transactionHash, ... })` where `transactionHash` is the return value of `signX402TransactionWithChainSignature()` — an Ethereum tx hash string. — §1.4 §1.7
+
+- [x] **Cronjob does NOT use a webhook from 1Click; it polls 1Click via SDK** — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:34` calls `checkSwapStatus(depositAddress)` which calls `OneClickService.getExecutionStatus(depositAddress)` at `lib/oneClick.ts:141`. No inbound webhook handler exists. — §1.4 §1.5
