@@ -62,7 +62,7 @@ scripts/validate-sql.ts                   → shared
 - [ ] Zcash shielded transactions hide amounts, sender, and recipient — verify if real ZK proof execution is in the codebase or if it delegates to 1Click — lib/oneClick.ts, components/IntentsQR.tsx — §1.5 §1.3
 - [ ] Automatic bridging from Zcash to Base/Solana via 1-Click API — verify 1Click integration exists and targets Base/Solana — lib/oneClick.ts — §1.5
 - [x] AI-Powered Intent Recognition: natural language processing to understand payment intents — CONFIRMED: `analyzePromptWithNearAI` in `lib/nearAI.ts:29` calls pgvector embedding search (`lib/serviceRegistry.ts:37`) then LLM chat completion (`lib/nearAI.ts:112`) with `gpt-4o-mini` (OpenAI) or `deepseek-chat-v3-0324` (NEAR AI Cloud) — §1.1
-- [ ] Semantic Service Matching: AI-powered search matches user queries to services (e.g., "Pay onlyfan" → OnlyFans) — verify pgvector similarity search is called — lib/serviceRegistry.ts — §1.2
+- [x] Semantic Service Matching: AI-powered search matches user queries to services (e.g., "Pay onlyfan" → OnlyFans) — CONFIRMED: `searchServicesSemantic` in `lib/serviceRegistry.ts:52-96` calls `match_services` RPC via `supabase.rpc('match_services', {...})` at `lib/serviceRegistry.ts:68`. pgvector `<=>` cosine distance operator is used in `supabase-setup.sql:69-74` — §1.2
 - [ ] NEAR Chain Signatures: MPC-based key management for cross-chain transaction signing — verify v1.signer is called for tx signing — lib/chainSig.ts, lib/near.ts — §1.6
 - [ ] x402 Payment Protocol: HTTP 402 standard with automatic payment verification and execution — verify 402 challenge/response cycle exists — app/api/content/get-url/route.ts, scripts/test-sign-x402-transaction.js — §1.7
 - [ ] Server-side cronjobs handle payment verification and execution — verify cronjob exists in vercel.json and does deposit + x402 execution — app/api/relayer/cronjob-check-deposits/route.ts — §1.4
@@ -74,10 +74,10 @@ scripts/validate-sql.ts                   → shared
 - [ ] ethers v5.7.2 is used for Ethereum interactions — verify in package.json — §1.6
 - [ ] chainsig.js is used as EVM chain adapter — verify import/usage — lib/chainSig.ts — §1.6
 - [ ] 1-Click API base URL is https://api.1click.fi — verify ONE_CLICK_API_URL env usage — lib/oneClick.ts — §1.5
-- [ ] pgvector is used for semantic search — verify the vector extension and match_services function — lib/supabase.ts, lib/serviceRegistry.ts — §1.2
+- [x] pgvector is used for semantic search — CONFIRMED: `CREATE EXTENSION IF NOT EXISTS vector` at `supabase-setup.sql:5`; `match_services` function defined at `supabase-setup.sql:36-78` uses `vector(1536)` type and `<=>` cosine distance; `supabase.rpc('match_services', ...)` called at `lib/serviceRegistry.ts:68` — §1.2
 - [x] OpenAI is used for embeddings — CONFIRMED: `lib/serviceRegistry.ts:6-8` creates an `OpenAI` client; `lib/serviceRegistry.ts:37-41` calls `openai.embeddings.create({ model: 'text-embedding-3-small', input: text })` — §1.1 §1.2
 - [~] NEAR AI Cloud is used for intent analysis — PARTIALLY CORRECT: `NEAR_AI_API_KEY` is read at `lib/nearAI.ts:7`, and if `OPENAI_API_KEY` is also set, OpenAI takes priority (`lib/nearAI.ts:7-11`). The codebase uses `openai` npm package for both; NEAR AI Cloud endpoint (`https://cloud-api.near.ai/v1`) is only used when `OPENAI_API_KEY` is absent. Comment says "TEMPORARILY using OpenAI for testing" (`lib/nearAI.ts:3`) — §1.1
-- [ ] Supabase is used for both service storage and deposit tracking — verify two separate tables/schemas exist — supabase-setup.sql, supabase-deposit-tracking.sql — §1.2 §1.4
+- [x] Supabase is used for both service storage and deposit tracking — CONFIRMED: `payment_services` table in `supabase-setup.sql:8-22` (service registry); `deposit_tracking` table in `supabase-deposit-tracking.sql:5-25` (deposit tracking). Different Supabase clients: anon key (`lib/supabase.ts`) for service registry; service role key (`lib/supabase-server.ts`) for deposit tracking — §1.2 §1.4
 - [ ] QR Code payments: simple QR code scanning for Zcash deposits — verify QR code generation component — components/IntentsQR.tsx — §1.3
 - [ ] ONE_CLICK_JWT reduces swap fees (without JWT incurs 0.1% fee) — verify JWT is passed to 1Click calls — lib/oneClick.ts — §1.5
 
@@ -111,12 +111,12 @@ scripts/validate-sql.ts                   → shared
 
 ### From SUPABASE_SETUP.md
 
-- [ ] payment_services table has fields: id, name, keywords, amount, currency, resource_key, contract_id, chain, description, active, embedding — verify in supabase-setup.sql — §1.2
-- [ ] data_drops table has fields: id, service_id, resource_key, contract_id, encrypted_data, required_payment_amount, required_payment_token, intent_type, action, private_key_encrypted — verify in supabase-setup.sql — §1.2 §1.7
-- [ ] match_services function performs semantic search using vector similarity with parameters query_embedding, match_threshold, match_count — verify in supabase-setup.sql — §1.2
-- [ ] Vector similarity index exists on payment_services.embedding — verify CREATE INDEX statement — supabase-setup.sql — §1.2
-- [ ] Two tables created by supabase-setup.sql: payment_services and data_drops — verify SQL file — §1.2
-- [ ] pgvector extension required for payment_services (not deposit_tracking) — verify in SQL — supabase-setup.sql — §1.2
+- [~] payment_services table has fields: id, name, keywords, amount, currency, resource_key, contract_id, chain, description, active, embedding — PARTIALLY CORRECT: actual columns are `id, name, keywords, amount, currency, url, chain, receiving_address, description, active, embedding, created_at, updated_at` (`supabase-setup.sql:8-22`). No `resource_key` column (it's `url`), no `contract_id` column. `resource_key` appears only as a legacy fallback in `lib/serviceRegistry.ts:86` for old DB rows — §1.2
+- [~] data_drops table has fields: id, service_id, resource_key, contract_id, encrypted_data, required_payment_amount, required_payment_token, intent_type, action, private_key_encrypted — NOT IN supabase-setup.sql: `data_drops` table is entirely absent from `supabase-setup.sql` (which only defines `payment_services`). Table either exists in a separate SQL file not found in the repo, or was created manually in the Supabase dashboard. Claim cannot be verified from codebase — §1.2 §1.7
+- [x] match_services function performs semantic search using vector similarity with parameters query_embedding, match_threshold, match_count — CONFIRMED: `CREATE OR REPLACE FUNCTION match_services(query_embedding vector(1536), match_threshold float, match_count int)` at `supabase-setup.sql:36-78`. Uses cosine distance `<=>` and similarity threshold filter — §1.2
+- [x] Vector similarity index exists on payment_services.embedding — CONFIRMED: `CREATE INDEX IF NOT EXISTS payment_services_embedding_idx ON payment_services USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)` at `supabase-setup.sql:25-28`. IVFFlat algorithm with 100 lists. Note: HNSW is not used — §1.2
+- [~] Two tables created by supabase-setup.sql: payment_services and data_drops — PARTIALLY INCORRECT: `supabase-setup.sql` creates only ONE table: `payment_services` (`supabase-setup.sql:8`). `data_drops` is absent. `deposit_tracking` is in a separate file (`supabase-deposit-tracking.sql:5`). Two SQL files total, each creating one table — §1.2
+- [x] pgvector extension required for payment_services (not deposit_tracking) — CONFIRMED: `CREATE EXTENSION IF NOT EXISTS vector` at `supabase-setup.sql:5` (alongside `payment_services`). `supabase-deposit-tracking.sql` has no vector extension reference — §1.2
 
 ### From SUPABASE_DEPOSIT_TRACKING.md
 
@@ -145,7 +145,23 @@ scripts/validate-sql.ts                   → shared
 
 #### §1.1 — Intent parser
 
-- [ ] The OpenAI client in `lib/serviceRegistry.ts` reads EITHER `OPENAI_API_KEY` or `NEAR_AI_API_KEY` as its API key (`lib/serviceRegistry.ts:8`); confirm which key is actually required for the service registry's embedding calls in practice — §1.2
+- [x] The OpenAI client in `lib/serviceRegistry.ts` reads EITHER `OPENAI_API_KEY` or `NEAR_AI_API_KEY` as its API key (`lib/serviceRegistry.ts:8`); confirm which key is actually required — CONFIRMED: `apiKey: process.env.OPENAI_API_KEY || process.env.NEAR_AI_API_KEY || ''` at `lib/serviceRegistry.ts:8`. In practice `OPENAI_API_KEY` is preferred; NEAR AI key is accepted as fallback. If neither is set, `generateEmbedding` warns and returns `null`, disabling semantic search (`lib/serviceRegistry.ts:31-34`) — §1.2
 - [ ] `getAllServicesForPrompt` at `lib/nearAI.ts:216` uses a dynamic `require('./serviceRegistry')` (CommonJS inside ESM); verify that this does not cause a runtime error in Next.js serverless functions — §1.1
 - [ ] `detectChainForDomain` in `lib/nearAI.ts:279` falls back to `'ethereum'` as default chain, but the rest of the codebase only supports `'base'` and `'solana'`; confirm whether any code path actually calls this function in production and what happens when it returns `'ethereum'` — §1.1
 - [ ] `lib/nearAI.ts` has hardcoded `bridgeFrom: 'zcash'` in both the service match path (`lib/nearAI.ts:44`) and the LLM system prompt example JSON (`lib/nearAI.ts:94`); verify that all intent paths ultimately produce `bridgeFrom: 'zcash'` — §1.1 §1.3
+
+---
+
+### NEW claims discovered while reading service registry (Task 2)
+
+#### §1.2 — Service registry
+
+- [x] IVFFlat index is used (not HNSW) for pgvector similarity search — CONFIRMED: `USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)` at `supabase-setup.sql:26-28`. No HNSW index exists in the schema — §1.2
+- [x] `receiving_address` column is a free-form TEXT with no chain/format constraint at DB level — CONFIRMED: `receiving_address TEXT` at `supabase-setup.sql:16`, no CHECK constraint. Validation only at API route level: chain must be 'base' or 'solana', but address format is not validated (`app/api/services/route.ts:78-90`) — §1.2
+- [x] currency is USDC-only for new service registrations — CONFIRMED: API route validates `currency !== 'USDC'` and rejects at `app/api/services/route.ts:70-74`. SQL schema allows `DEFAULT 'USD'` but app layer enforces USDC — §1.2
+- [x] `deleteService` performs soft-delete (active=false), not actual DELETE — CONFIRMED: `lib/serviceRegistry.ts:373-377` sets `active: false` without SQL DELETE — §1.2
+- [x] `url` field is hidden from GET /api/services list response for security — CONFIRMED: `route.ts:44-45` destructures url out before responding; url is only included for `?id=` single-fetch (`route.ts:30`) — §1.2
+- [~] `data_drops` table referenced by SUPABASE_SETUP.md exists in supabase-setup.sql — REFUTED: `data_drops` is completely absent from `supabase-setup.sql`. Only `payment_services` is defined. `data_drops` may exist in an undiscovered SQL file or was created manually — §1.2 §1.7
+- [x] `deposit_tracking` table has `quote_data JSONB`, `deadline TIMESTAMP WITH TIME ZONE`, `signed_payload TEXT` columns — CONFIRMED: `supabase-deposit-tracking.sql:22-24` — §1.4
+- [x] `deposit_tracking` table `deposit_address TEXT PRIMARY KEY` — CONFIRMED: `supabase-deposit-tracking.sql:6` — §1.4
+- [x] `deposit_tracking` table RLS is disabled — CONFIRMED: `ALTER TABLE deposit_tracking DISABLE ROW LEVEL SECURITY` at `supabase-deposit-tracking.sql:52` — §1.4
