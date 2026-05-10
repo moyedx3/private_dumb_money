@@ -90,13 +90,13 @@ scripts/validate-sql.ts                   → shared
 
 ### From DEPLOY.md
 
-- [ ] Vercel Cron Jobs configured in vercel.json — verify vercel.json has cron entry for /api/relayer/cronjob-check-deposits — vercel.json — §1.4
-- [ ] Cronjob checks deposits every 5 seconds — verify schedule in vercel.json — vercel.json — §1.4
-- [ ] POST /api/relayer/register-deposit — registers deposit addresses — verify route handler — app/api/relayer/register-deposit/route.ts — §1.4
-- [ ] POST /api/relayer/check-deposit — checks deposit status — verify route handler — app/api/relayer/check-deposit/route.ts — §1.4
-- [ ] POST /api/relayer/submit-tx-hash — submits transaction hash to speed up swap — verify route handler — app/api/relayer/submit-tx-hash/route.ts — §1.4 §1.5
-- [ ] POST /api/relayer/refund — handles refunds — verify route handler exists — app/api/relayer/ — §1.4
-- [ ] GET /api/relayer/cronjob-check-deposits — cronjob endpoint that checks deposits and executes x402 payments — verify handler logic — app/api/relayer/cronjob-check-deposits/route.ts — §1.4 §1.7
+- [x] Vercel Cron Jobs configured in vercel.json — CONFIRMED: `vercel.json:7-11` has cron entry `{ "path": "/api/relayer/cronjob-check-deposits", "schedule": "*/1 * * * *" }` — §1.4
+- [~] Cronjob checks deposits every 5 seconds — PARTIALLY CORRECT / MISLEADING: `vercel.json:9` schedule is `*/1 * * * *` = **every 1 minute** (Vercel cron minimum). `scripts/run-cronjob.js:17` local dev script runs every 5000ms = 5 seconds, but this is a local-only script, NOT the Vercel deployment behavior. DEPLOY.md conflates the two. — §1.4
+- [x] POST /api/relayer/register-deposit — CONFIRMED: `app/api/relayer/register-deposit/route.ts:14` exports `POST(request)`. Calls `getSwapQuote()` → 1Click `/v0/quote`, stores result via `registerDeposit()` to Supabase — §1.4
+- [x] POST /api/relayer/check-deposit — CONFIRMED: `app/api/relayer/check-deposit/route.ts:85` exports `POST(request)`. Calls `checkSwapStatus(depositAddress)` → `OneClickService.getExecutionStatus()`, returns `{ confirmed, status, signedPayload, ... }` — §1.4
+- [x] POST /api/relayer/submit-tx-hash — CONFIRMED: `app/api/relayer/submit-tx-hash/route.ts:9` exports `POST(request)`. Calls `OneClickService.submitDepositTx({ txHash, depositAddress })` then `updateDepositTracking(depositAddress, { txHashSubmitted: true, depositTxHash: txHash })` — §1.4 §1.5
+- [x] POST /api/relayer/refund — REFUTED: No `app/api/relayer/refund/route.ts` file exists. The refund endpoint claimed by DEPLOY.md is not implemented. Refund logic is entirely absent from the codebase. — §1.4
+- [x] GET /api/relayer/cronjob-check-deposits — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:15` exports `GET(request)`. Polls `getDepositsWithDeadlineRemaining()`, calls `checkSwapStatus()` per deposit, executes `signX402TransactionWithChainSignature()` on SUCCESS, saves tx hash to `signed_payload` column — §1.4 §1.7
 - [ ] Relayer is integrated into Next.js API routes (no separate Fly.io deployment) — verify no fly.toml or separate server — §0
 - [ ] Contract initialized with args x402_facilitator and intents_contract — verify init call in deploy.sh — contract/deploy.sh — §1.8
 
@@ -120,24 +120,24 @@ scripts/validate-sql.ts                   → shared
 
 ### From SUPABASE_DEPOSIT_TRACKING.md
 
-- [ ] deposit_tracking table exists with columns: deposit_address (TEXT, PRIMARY KEY), quote_data (JSONB), deadline (TIMESTAMP), signed_payload (TEXT) — verify in supabase-deposit-tracking.sql — §1.4
-- [ ] quote_data JSONB stores full quote from 1-Click API including deposit address, amounts (ZEC, USDC), exchange rates, all quote metadata — verify structure — lib/depositTracking.ts — §1.4 §1.5
-- [ ] signed_payload column stores signed x402 payment payload after cronjob executes — verify column used in cronjob handler — app/api/relayer/cronjob-check-deposits/route.ts — §1.4 §1.7
-- [ ] Cronjob calls OneClickService.getExecutionStatus to check 1Click swap status — verify the exact method call — lib/oneClick.ts, app/api/relayer/cronjob-check-deposits/route.ts — §1.4 §1.5
-- [ ] Cronjob executes x402 payment only if 1Click status is SUCCESS — verify conditional logic — app/api/relayer/cronjob-check-deposits/route.ts — §1.4 §1.7
-- [ ] System falls back to in-memory storage if Supabase is not configured — verify in-memory fallback in depositTracking.ts — lib/depositTracking.ts — §1.4
-- [ ] check-deposit route retrieves signedPayload from Supabase; UI redirects to content page with signedPayload — verify redirect logic — app/api/relayer/check-deposit/route.ts, app/content/page.tsx — §1.4 §1.7
+- [x] deposit_tracking table exists with columns: deposit_address (TEXT, PRIMARY KEY), quote_data (JSONB), deadline (TIMESTAMP), signed_payload (TEXT) — CONFIRMED: `supabase-deposit-tracking.sql:5-25`. All four claimed columns present. Additional columns not mentioned in claim: `intent_id, amount, recipient, swap_wallet_address, near_account_id, confirmed, x402_executed, tx_hash_submitted, deposit_tx_hash, chain, intent_type, redirect_url, swap_id` — §1.4
+- [x] quote_data JSONB stores full quote from 1-Click API — CONFIRMED: `app/api/relayer/register-deposit/route.ts:80` sets `quoteData = quote` (full response); `registerDeposit()` stores it at `lib/depositTracking.ts:115`. Also stores `metadata` merged into quoteData (`register-deposit/route.ts:100-106`) — §1.4 §1.5
+- [~] signed_payload column stores signed x402 payment payload after cronjob executes — PARTIALLY CORRECT / COLUMN NAME MISLEADING: column is used (`supabase-deposit-tracking.sql:24`), but the stored value is an **Ethereum transaction hash** (not a "signed payload" / Base64 encoded bytes). `cronjob-check-deposits/route.ts:135` stores `transactionHash` (return value of `signX402TransactionWithChainSignature()`) into `signedPayload` — §1.4 §1.7
+- [x] Cronjob calls OneClickService.getExecutionStatus to check 1Click swap status — CONFIRMED: `lib/oneClick.ts:141` — `OneClickService.getExecutionStatus(depositAddress)` is the exact call. Called via `checkSwapStatus()` wrapper. Cronjob invokes at `app/api/relayer/cronjob-check-deposits/route.ts:34` — §1.4 §1.5
+- [x] Cronjob executes x402 payment only if 1Click status is SUCCESS — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:47` — `if (normalizedStatus === 'SUCCESS' && !tracking.signedPayload && !tracking.x402Executed)` — §1.4 §1.7
+- [x] System falls back to in-memory storage if Supabase is not configured — CONFIRMED: `lib/depositTracking.ts:26` — `const depositTracking = new Map<string, DepositTracking>()`. All CRUD functions check `if (supabaseServer)` first, fall back to this Map. **However**, in-memory Map does not survive across serverless invocations — effectively non-functional in Vercel deployment without Supabase — §1.4
+- [x] check-deposit route retrieves signedPayload from Supabase; UI redirects to content page with signedPayload — CONFIRMED: `app/api/relayer/check-deposit/route.ts:193` returns `signedPayload: tracking?.signedPayload`. UI reads this field and redirects to content page — §1.4 §1.7
 
 ### From SUPABASE_ENV_VARS.md
 
-- [ ] SUPABASE_SERVICE_ROLE_KEY is used for server-side operations (cronjobs, API routes) and bypasses RLS — verify the service role client is used in cronjob and relayer routes — lib/supabase-server.ts — §1.4
-- [ ] Log message "✅ Supabase server client initialized" appears when service role key is present — verify in lib/supabase-server.ts — §1.4
-- [ ] Log message "⚠️ Supabase service role key not found" appears when key is missing — verify in lib/supabase-server.ts — §1.4
+- [x] SUPABASE_SERVICE_ROLE_KEY is used for server-side operations (cronjobs, API routes) and bypasses RLS — CONFIRMED: `lib/supabase-server.ts:6` reads `SUPABASE_SERVICE_ROLE_KEY`; `createClient(url, serviceKey)` at `lib/supabase-server.ts:17`. RLS is also explicitly disabled on the table (`supabase-deposit-tracking.sql:52`). `supabaseServer` is imported by all relayer routes via `lib/depositTracking.ts:2` — §1.4
+- [x] Log message "✅ Supabase server client initialized" appears when service role key is present — CONFIRMED: `lib/supabase-server.ts:12` — `console.log('✅ Supabase server client initialized')` — §1.4
+- [x] Log message "⚠️ Supabase service role key not found" appears when key is missing — CONFIRMED: `lib/supabase-server.ts:9` — `console.warn('⚠️ Supabase service role key not found. Using in-memory storage as fallback.')` — §1.4
 
 ### From SUPABASE_SETUP_INSTRUCTIONS.md
 
-- [ ] deposit_tracking table primary key is deposit_address (TEXT) — verify in supabase-deposit-tracking.sql — §1.4
-- [ ] deposit_tracking table does NOT require vector extension — verify SQL file — §1.4
+- [x] deposit_tracking table primary key is deposit_address (TEXT) — CONFIRMED: `supabase-deposit-tracking.sql:6` — `deposit_address TEXT PRIMARY KEY` — §1.4
+- [x] deposit_tracking table does NOT require vector extension — CONFIRMED: `supabase-deposit-tracking.sql` has no `CREATE EXTENSION vector` reference. The file creates only the `deposit_tracking` table and its indexes. pgvector is in `supabase-setup.sql` only — §1.4
 
 ---
 
@@ -193,3 +193,33 @@ scripts/validate-sql.ts                   → shared
 - [x] **`signedPayload` column stores the Ethereum transaction hash (not a Base64 payload)** — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:135` calls `updateDepositTracking(depositAddress, { signedPayload: transactionHash, ... })` where `transactionHash` is the return value of `signX402TransactionWithChainSignature()` — an Ethereum tx hash string. — §1.4 §1.7
 
 - [x] **Cronjob does NOT use a webhook from 1Click; it polls 1Click via SDK** — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:34` calls `checkSwapStatus(depositAddress)` which calls `OneClickService.getExecutionStatus(depositAddress)` at `lib/oneClick.ts:141`. No inbound webhook handler exists. — §1.4 §1.5
+
+---
+
+### NEW claims discovered while reading deposit tracking (Task 4)
+
+#### §1.4 — Deposit tracking (additional)
+
+- [x] **`POST /api/relayer/refund` does NOT exist** — CONFIRMED: DEPLOY.md claims this route exists but `app/api/relayer/` contains only: `check-deposit/`, `cronjob-check-deposits/`, `register-deposit/`, `submit-tx-hash/`, `test-supabase/`. No `refund/` directory. User refund on x402 execution failure is unimplemented. — §1.4
+
+- [x] **Cron handler authentication is commented out** — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:17-21` contains commented-out CRON_SECRET check. The endpoint is publicly callable without any token. Same applies to `test-supabase` route (`app/api/relayer/test-supabase/route.ts:7` — no auth at all). — §1.4
+
+- [x] **`deadline` in x402 execution is always re-computed as `Date.now() + 3600s`** — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:87` sets `const deadline = Math.floor(Date.now() / 1000) + 3600`. The quote's original deadline (stored in `quote_data`) is NOT used for the x402 `deadline` parameter — a fresh 1-hour deadline is synthesized at execution time. — §1.4 §1.7
+
+- [x] **`nonce` for x402 is timestamp-derived** — CONFIRMED: `app/api/relayer/cronjob-check-deposits/route.ts:88` sets `const nonce = \`0x${Date.now().toString(16)}\``. No cryptographically random nonce is used. Two executions within the same millisecond would produce the same nonce (extremely unlikely but theoretically possible). — §1.4 §1.7
+
+- [x] **In-memory fallback is non-functional in Vercel serverless** — CONFIRMED: `lib/depositTracking.ts:26` defines `const depositTracking = new Map()` at module scope. In Next.js serverless (Vercel), each invocation is a separate Lambda; the Map is re-initialized empty. Data written in one invocation is not visible to another. Supabase is functionally required for the system to work. — §1.4
+
+- [x] **`swapType: 'EXACT_OUTPUT'` is used in the 1Click quote** — CONFIRMED: `lib/oneClick.ts:80`. Despite the comment saying "FLEX_INPUT", the code sets `swapType: 'EXACT_OUTPUT'` — the user provides a target USDC output amount, and 1Click calculates how much ZEC input is needed. — §1.4 §1.5
+
+#### §1.5 — 1Click status states (new)
+
+- [ ] **1Click `getExecutionStatus` response structure** — the cron handler checks `statusResponse.status || statusResponse.executionStatus || statusResponse.state` (`cronjob-check-deposits/route.ts:37-40`), suggesting the SDK response key is not known with certainty. Actual SDK response field name needs verification against `@defuse-protocol/one-click-sdk-typescript@0.1.14` type definitions. — §1.5
+
+- [ ] **1Click status `INCOMPLETE_DEPOSIT` does not trigger x402 execution or user notification** — `check-deposit/route.ts:66-68` returns `{ incompleteDeposit: true }` but the cronjob skips x402 for any non-SUCCESS status. No automatic retry or user alert exists for partial deposits. Verify whether 1Click eventually auto-refunds or the deposit is permanently stuck. — §1.4 §1.5
+
+#### §1.7 — x402 trigger (new)
+
+- [ ] **`signX402TransactionWithChainSignature()` return value is always an Ethereum tx hash** — `cronjob-check-deposits/route.ts:127-132` calls this function and stores the result as `transactionHash`. Verify in `lib/chainSig.ts` that the return type is indeed a tx hash string and not a signed-but-unbroadcast payload. Relevant for understanding whether x402 unlock is synchronous or deferred. — §1.7
+
+- [ ] **`payTo` extraction from `quoteData` is fragile** — `cronjob-check-deposits/route.ts:85` uses `quote?.payTo || tracking.recipient || quote?.recipient`. The 1Click `/v0/quote` response likely does not include a `payTo` field (it's a swap quote, not an x402 quote). This means `tracking.recipient` (the AI-parsed x402 address) is almost always used. Verify that `tracking.recipient` is reliably populated from intent parsing. — §1.4 §1.7
