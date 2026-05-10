@@ -29,9 +29,24 @@ If the prior finding holds, the differentiation angle for our team is "make Zcas
 
 ## 3. Deliverable
 
-**File:** `week3/pay-anyone-legend-deep-dive.md` (single file; split if it exceeds ~3,000 lines)
+**Directory:** `week3/pay-anyone-legend/` — one file per subsystem section so each deep section stays navigable on its own.
 
-**Language:** Korean prose with English technical terms — matches week2 deliverable style.
+```
+week3/pay-anyone-legend/
+  README.md                       # §0 Big picture + index that links to all others (written last)
+  01-intent-parser.md             # §1.1
+  02-service-registry.md          # §1.2
+  03-z-address-generation.md      # §1.3
+  04-deposit-tracking.md          # §1.4
+  05-one-click-bridge.md          # §1.5
+  06-near-chain-signatures.md     # §1.6
+  07-x402-client.md               # §1.7
+  08-near-rust-contract.md        # §1.8
+  category-E-extraction.md        # §2
+  zcash-tool-inventory.md         # §3
+```
+
+**Language:** Korean prose with English technical terms — matches week2 deliverable style. (The plan and this spec are in English; the output deep-dive files are Korean.)
 
 **Structure:**
 
