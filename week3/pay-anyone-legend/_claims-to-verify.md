@@ -84,8 +84,8 @@ scripts/validate-sql.ts                   → shared
 ### From SETUP.md
 
 - [x] X402_FACILITATOR env var is set to x402.near — CONFIRMED (deploy.sh only, not read in TS): `contract/deploy.sh:15` — `X402_FACILITATOR="x402.near"` used in `near contract deploy ... json-args "{\"x402_facilitator\":\"$X402_FACILITATOR\",...}"`. NOT read by any TypeScript file — no `process.env.X402_FACILITATOR` reference exists in `lib/` or `app/`. The env var exists only in the shell deploy script. — §1.7 §1.8
-- [ ] NEXT_PUBLIC_INTENTS_CONTRACT env var set to intents.near — verify it is used in TS code — lib/near.ts or contract/ — §1.8
-- [ ] NEXT_PUBLIC_CONTRACT_ID env var set to anyone-pay.near — verify it points to the NEAR Rust contract — lib/near.ts — §1.8
+- [~] NEXT_PUBLIC_INTENTS_CONTRACT env var set to intents.near — PARTIALLY CORRECT / NEVER READ IN TS: `contract/update-env.sh:46` writes `NEXT_PUBLIC_INTENTS_CONTRACT=intents.near` to `.env.local`, and `next.config.js:7` defines it as `process.env.NEXT_PUBLIC_INTENTS_CONTRACT || 'intents.near'`. However, `rg -n "NEXT_PUBLIC_INTENTS_CONTRACT" --type ts --type tsx` returns 0 results — no `.ts`/`.tsx` file reads this variable. The env var exists in config but is not consumed by runtime TypeScript code. — §1.8
+- [x] NEXT_PUBLIC_CONTRACT_ID env var set to anyone-pay.near — CONFIRMED (defined, never read in TS): `next.config.js:6` defines `NEXT_PUBLIC_CONTRACT_ID: process.env.NEXT_PUBLIC_CONTRACT_ID || 'anyone-pay.near'`. `contract/update-env.sh:45` writes this value to `.env.local` post-deploy. However, `rg -n "NEXT_PUBLIC_CONTRACT_ID" --type ts --type tsx` returns 0 results — no `.ts`/`.tsx` file reads this variable. The env var points to the NEAR Rust contract account but is never used by runtime code. — §1.8
 - [x] Contract is deployed to anyone-pay.near — CONFIRMED: `contract/deploy.sh:14` — `ACCOUNT_ID="anyone-pay.near"`. `near contract deploy $ACCOUNT_ID ... network-config mainnet` — §1.8
 
 ### From DEPLOY.md
@@ -107,7 +107,7 @@ scripts/validate-sql.ts                   → shared
 - [~] Contract method mark_funded(intent_id) — marks intent as funded, caller is "relayer only" — PARTIALLY CORRECT: Method exists at `contract/src/lib.rs:158`. Decorated with `#[private]` (`lib.rs:157`), which in NEAR means "only callable by the contract itself (self cross-call), NOT by an external relayer." The DEPLOY_CONTRACT.md claim that "caller is relayer only" is incorrect — `#[private]` restricts to self-calls only, not an external relayer account. — §1.8
 - [x] Contract method execute_x402_payment(intent_id, amount, recipient) — CONFIRMED (method exists): `contract/src/lib.rs:105`. Calls `Promise::new(self.x402_facilitator.clone()).function_call("pay", ...)` (`lib.rs:126–138`). Requires `intent.status == IntentStatus::Funded` (`lib.rs:113`). However: **no TypeScript code calls this method in the production x402 flow** — confirmed by absence of any `execute_x402_payment` reference in `lib/` or `app/`. Method is a design placeholder. — §1.7 §1.8
 - [~] Contract method verify_deposit(intent_id) — verifies deposit via NEAR Intents — PARTIALLY CORRECT / BROKEN: Method exists at `contract/src/lib.rs:84`. Calls `Promise::new(self.intents_contract.clone()).function_call("mt_batch_balance_of", ...)` but immediately returns `true` without awaiting the Promise result (`lib.rs:100`). The asynchronous Promise result is never captured. Verification is a no-op — always returns true. — §1.4 §1.8
-- [ ] Contract is deployed to mainnet (anyone-pay.near) — verify target in deploy.sh — contract/deploy.sh — §1.8
+- [x] Contract is deployed to mainnet (anyone-pay.near) — CONFIRMED: `contract/deploy.sh:14` — `ACCOUNT_ID="anyone-pay.near"`. `deploy.sh:35` — `network-config mainnet`. `deploy.sh:28–36` — full deploy command with init args `x402_facilitator="x402.near"` and `intents_contract="intents.near"`. — §1.8
 
 ### From SUPABASE_SETUP.md
 
@@ -301,3 +301,25 @@ scripts/validate-sql.ts                   → shared
 - [x] **`verify_deposit()` is a broken no-op** — CONFIRMED: `contract/src/lib.rs:84–101`. Creates a Promise to call `intents.near.mt_batch_balance_of()` but does not use `.then()` to capture the async result. Returns `true` unconditionally (`lib.rs:100`). The Promise is fire-and-forget; verification never actually verifies. — §1.8
 
 - [x] **Intent struct has 8 fields: id, user, intent_type, deposit_address, amount, status, redirect_url, created_at** — CONFIRMED: `contract/src/lib.rs:9–18`. `IntentStatus` enum: `Pending`, `Funded`, `Executing`, `Completed`, `Failed` (`lib.rs:20–28`). — §1.8
+
+---
+
+### NEW claims discovered while reading NEAR Rust contract (Task 8)
+
+#### §1.8 — Rust contract (Task 8 final verification)
+
+- [x] **Verdict (f): Contract is bypassed (dead code) in the live production TS path** — CONFIRMED RIGOROUSLY: Full `rg` search across all `.ts`, `.tsx`, `.js` files for `anyone-pay\.near`, `NEXT_PUBLIC_CONTRACT_ID`, `create_intent`, `mark_funded`, `execute_x402_payment`, `verify_deposit`, `get_intent` returns only 2 non-method-call matches: `register-deposit/route.ts:56` (string fallback for 1Click `senderAddress` parameter, NOT a contract call) and `next.config.js:6` (env var definition, not consumption). Zero TypeScript files invoke any contract method. — §1.8
+
+- [x] **`NEXT_PUBLIC_CONTRACT_ID` is defined in `next.config.js:6` but read by zero `.ts`/`.tsx` files** — CONFIRMED: `rg -n "NEXT_PUBLIC_CONTRACT_ID" --type ts --type tsx` = 0 results. The variable propagation chain ends at `next.config.js` — the frontend never actually reads the contract ID from the environment. — §1.8
+
+- [x] **`NEXT_PUBLIC_INTENTS_CONTRACT` is defined in `next.config.js:7` and `update-env.sh:46` but read by zero `.ts`/`.tsx` files** — CONFIRMED: `rg` search yields 0 TS/TSX results. — §1.8
+
+- [x] **`near-sdk` version is 5.1.0 with `legacy` feature flag** — CONFIRMED: `contract/Cargo.toml:11` — `near-sdk = { version = "5.1.0", features = ["legacy"] }`. The `legacy` feature enables backward compatibility with older NEAR SDK serialization formats. — §1.8
+
+- [x] **`build.sh` does NOT use `wasm-opt` post-processing** — CONFIRMED: `contract/build.sh:4–5` — only `cargo build` and `cp`. No `wasm-opt -Oz` step. Release profile (`Cargo.toml:16–22`) provides size optimization via `opt-level = "z"`, `lto = true`, `strip = true` but no Binaryen post-pass. — §1.8
+
+- [x] **`on_x402_payment_success()` callback is unreachable (dead callback)** — CONFIRMED: `contract/src/lib.rs:144–150`. This method is the `.then()` callback for `execute_x402_payment()`. Since `execute_x402_payment()` is itself dead code (never called from TS), this callback is also unreachable from any production path. — §1.8
+
+- [x] **`test-contract.sh` only tests `create_intent` + `get_intent`; never calls `verify_deposit`, `mark_funded`, or `execute_x402_payment`** — CONFIRMED: `contract/test-contract.sh:12–31` — only two near CLI calls: `create_intent` (line 12) and `get_intent` (line 26). The three most security-critical methods (`verify_deposit`, `mark_funded`, `execute_x402_payment`) have no test coverage at all. — §1.8
+
+- [x] **`deploy.sh` network-config for `get_intent` calls BOTH mainnet and testnet in the same script (bug)** — CONFIRMED: `contract/deploy.sh:63–67` — the `get_intent` call uses `network-config mainnet` AND `network-config testnet` sequentially. This is a script bug — one of the two calls will fail if only one network has the contract. The create_intent call on line 52 uses only mainnet. — §1.8
