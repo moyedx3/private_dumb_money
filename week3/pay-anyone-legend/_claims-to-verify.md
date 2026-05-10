@@ -326,6 +326,26 @@ scripts/validate-sql.ts                   → shared
 
 ---
 
+---
+
+### §3 — Zcash tool inventory (Task 12 final verification)
+
+- [x] **§3.2 — PAL이 1Click에 위임하는 API 호출 시퀀스** — CONFIRMED (§3.2 작성 완료): 세 개의 API 호출(`POST /v0/quote`, SDK `submitDepositTx`, SDK `getExecutionStatus`)이 전부다. 각각 `lib/oneClick.ts:102`, `lib/oneClick.ts:155`, `lib/oneClick.ts:141`에서 확인. PAL은 Zcash 트랜잭션을 construct/sign/broadcast하지 않는다. — §3.2
+
+- [x] **§3.2 — 책임 분담 표 (responsibility split)** — CONFIRMED: 1Click이 담당하는 항목(deposit address 생성, ZEC 입금 모니터링, custody, ZEC→USDC 환전, swapWallet 전달)과 PAL이 담당하는 항목(NEAR Chain Signatures x402 실행, Supabase 기록)이 코드 레벨에서 검증됨. `cronjob-check-deposits/route.ts:34`, `lib/chainSig.ts:210–401` 참조. — §3.2
+
+- [x] **§3.3 — 판정 (C) Outsourced 재진술** — CONFIRMED (§3.3 작성 완료): `lib/oneClick.ts:126`, `app/api/relayer/register-deposit/route.ts:66`에서 전체 z-address generation이 1Click API 응답 pass-through임을 최종 확인. `crypto.getRandomValues + 'zs1' prefix` 패턴은 존재하지 않으며, `zs1test123`/`zs1test123456789`는 `contract/deploy.sh:54`, `contract/test-contract.sh:14`의 shell test literal임을 명시. — §3.3
+
+- [x] **§3.3 — week2 "random zs1 prefix" 가설 명시적 반증** — CONFIRMED: `rg -n "getRandomValues" --type ts`는 Zcash 목적 호출을 반환하지 않음; `rg -n "zs1" --type ts`는 제로 결과. 전체 `zs1*` 문자열 두 개는 모두 test script literal. — §3.3
+
+- [x] **§3.4 Part A — package.json 전체 dependency 분류** — CONFIRMED (§3.4 Part A 작성 완료): 총 29개 dependency 분류 완료. zcash-native 패키지 0개. `bech32`는 crypto-primitive로 분류하되 "Cosmos 주소에만 사용, Zcash 무관" 명시. — §3.4
+
+- [x] **§3.4 Part B — native Zcash dev tool 카탈로그** — CONFIRMED (§3.4 Part B 작성 완료): 10개 항목 (`zcash_client_backend`, `zcash_primitives`, `librustzcash`, `zcashd` JSON-RPC, `lightwalletd`, `ZcashLightClientKit`, `pczt`, ZIP-321, Zcash JS 생태계 부재 finding, Zashi 참조 구현) 작성. 각 URL WebFetch 검증 완료. — §3.4
+
+- [x] **§3.4 Part C — Category E recommendation** — CONFIRMED (§3.4 Part C 작성 완료): Rust backend + `zcash_client_backend` + lightwalletd + ZIP-321 URI + (선택적) pczt 스택 권고. "권고이지 확정 설계가 아님" 명시. — §3.4
+
+---
+
 ## Remaining work (post-synthesis)
 
 The following `[~]` claims require live production testing or external API access to resolve fully; they are out of scope for static codebase analysis:
