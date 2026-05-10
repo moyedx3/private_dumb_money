@@ -63,16 +63,16 @@ scripts/validate-sql.ts                   → shared
 - [x] Automatic bridging from Zcash to Base/Solana via 1-Click API — CONFIRMED: `lib/oneClick.ts:169-179` defines `ASSETS.ZCASH = 'nep141:zec.omft.near'`, `ASSETS.USDC_BASE`, `ASSETS.USDC_SOLANA`. `register-deposit/route.ts:31-36` selects `usdcAsset` based on chain. `getSwapQuote()` called with `originAsset: ASSETS.ZCASH`, `destinationAsset: usdcAsset`. Both Base and Solana destination chains are supported. — §1.5
 - [x] AI-Powered Intent Recognition: natural language processing to understand payment intents — CONFIRMED: `analyzePromptWithNearAI` in `lib/nearAI.ts:29` calls pgvector embedding search (`lib/serviceRegistry.ts:37`) then LLM chat completion (`lib/nearAI.ts:112`) with `gpt-4o-mini` (OpenAI) or `deepseek-chat-v3-0324` (NEAR AI Cloud) — §1.1
 - [x] Semantic Service Matching: AI-powered search matches user queries to services (e.g., "Pay onlyfan" → OnlyFans) — CONFIRMED: `searchServicesSemantic` in `lib/serviceRegistry.ts:52-96` calls `match_services` RPC via `supabase.rpc('match_services', {...})` at `lib/serviceRegistry.ts:68`. pgvector `<=>` cosine distance operator is used in `supabase-setup.sql:69-74` — §1.2
-- [ ] NEAR Chain Signatures: MPC-based key management for cross-chain transaction signing — verify v1.signer is called for tx signing — lib/chainSig.ts, lib/near.ts — §1.6
+- [x] NEAR Chain Signatures: MPC-based key management for cross-chain transaction signing — CONFIRMED: `lib/chainSig.ts:24-27` — `new contracts.ChainSignatureContract({ networkId, contractId: 'v1.signer' })`. `chainSignatureContract.sign()` called at `lib/chainSig.ts:147` (EIP-712 hash) and `lib/chainSig.ts:372` (EVM tx hash). chainsig.js handles the cross-contract call to `v1.signer.sign()`. — §1.6
 - [ ] x402 Payment Protocol: HTTP 402 standard with automatic payment verification and execution — verify 402 challenge/response cycle exists — app/api/content/get-url/route.ts, scripts/test-sign-x402-transaction.js — §1.7
 - [ ] Server-side cronjobs handle payment verification and execution — verify cronjob exists in vercel.json and does deposit + x402 execution — app/api/relayer/cronjob-check-deposits/route.ts — §1.4
 - [ ] Polling system tracks deposit and payment status — verify polling loop or status endpoint exists — lib/depositTracking.ts, app/api/relayer/check-deposit/route.ts — §1.4
 - [ ] URL-Based State Persistence: Bookmarkable deposit links restore full payment state — verify payment state is encoded in URL — app/page.tsx, app/receipt/page.tsx — §0
 - [~] Semantic similarity threshold default is 0.6 — PARTIALLY CORRECT: `findBestService` default param is 0.7 (`lib/serviceRegistry.ts:168`), but `analyzePromptWithNearAI` explicitly passes 0.6 when calling it (`lib/nearAI.ts:32`). The effective threshold for intent parsing is 0.6, but the library default is 0.7 — §1.1 §1.2
 - [ ] NEAR contract address for x402 facilitator is x402.near — verify env var X402_FACILITATOR and any call to it — contract/src/lib.rs, lib/chainSig.ts — §1.8
-- [ ] NEAR MPC contract used is v1.signer — verify NEAR_PROXY_CONTRACT_ID usage — lib/near.ts, lib/chainSig.ts — §1.6
-- [ ] ethers v5.7.2 is used for Ethereum interactions — verify in package.json — §1.6
-- [ ] chainsig.js is used as EVM chain adapter — verify import/usage — lib/chainSig.ts — §1.6
+- [x] NEAR MPC contract used is v1.signer — CONFIRMED: `lib/chainSig.ts:21` — `const contractId = process.env.NEAR_PROXY_CONTRACT_ID || 'v1.signer'`. `lib/near.ts:24` — same env var read. Default is `v1.signer` in both files. — §1.6
+- [x] ethers v5.7.2 is used for Ethereum interactions — CONFIRMED: `package.json:22` — `"ethers": "^5.7.2"`. Used in `lib/chainSig.ts:4` for EIP-712 hash, BigNumber, ABI encoding, address checksum. Also in `lib/kdf.ts:13` for `ethers.utils.getAddress()`. — §1.6
+- [x] chainsig.js is used as EVM chain adapter — CONFIRMED: `lib/chainSig.ts:7` — `import { contracts, chainAdapters } from 'chainsig.js'`. `chainAdapters.evm.EVM` created at `lib/chainSig.ts:50-53`. Used for `deriveAddressAndPublicKey`, `prepareTransactionForSigningLegacy`, `finalizeTransactionSigningLegacy`. Version `^1.1.14` in `package.json:21`. — §1.6
 - [~] 1-Click API base URL is https://api.1click.fi — PARTIALLY CORRECT (URL DIFFERS): actual default is `https://1click.chaindefuser.com` at `lib/oneClick.ts:7`. `ONE_CLICK_API_URL` env var overrides it. The domain `1click.fi` is NOT used — §1.5
 - [x] pgvector is used for semantic search — CONFIRMED: `CREATE EXTENSION IF NOT EXISTS vector` at `supabase-setup.sql:5`; `match_services` function defined at `supabase-setup.sql:36-78` uses `vector(1536)` type and `<=>` cosine distance; `supabase.rpc('match_services', ...)` called at `lib/serviceRegistry.ts:68` — §1.2
 - [x] OpenAI is used for embeddings — CONFIRMED: `lib/serviceRegistry.ts:6-8` creates an `OpenAI` client; `lib/serviceRegistry.ts:37-41` calls `openai.embeddings.create({ model: 'text-embedding-3-small', input: text })` — §1.1 §1.2
@@ -220,7 +220,7 @@ scripts/validate-sql.ts                   → shared
 
 #### §1.7 — x402 trigger (new)
 
-- [ ] **`signX402TransactionWithChainSignature()` return value is always an Ethereum tx hash** — `cronjob-check-deposits/route.ts:127-132` calls this function and stores the result as `transactionHash`. Verify in `lib/chainSig.ts` that the return type is indeed a tx hash string and not a signed-but-unbroadcast payload. Relevant for understanding whether x402 unlock is synchronous or deferred. — §1.7
+- [x] **`signX402TransactionWithChainSignature()` return value is always an Ethereum tx hash** — CONFIRMED: `lib/chainSig.ts:394-401` — `publicClient.sendRawTransaction({ serializedTransaction: signedTx })` is called inside the function, and `broadcastTxHash` (a `0x...` string) is returned. The tx is fully broadcast to Base mainnet before the function returns. `cronjob-check-deposits/route.ts:127` stores this as `transactionHash`. Broadcast is synchronous within the function; no deferred unlock. — §1.7
 
 - [x] **`payTo` extraction from `quoteData` is fragile** — CONFIRMED: `cronjob-check-deposits/route.ts:85` uses `quote?.payTo || tracking.recipient || quote?.recipient`. The 1Click `/v0/quote` response does NOT include a `payTo` field (it's a swap quote, not an x402 quote), so `quote?.payTo` is always `undefined`. The effective path is always `tracking.recipient`, which is the AI-parsed x402 address stored at deposit registration time (`register-deposit/route.ts:113`). `tracking.recipient` IS reliably populated from `lib/nearAI.ts:43–44` intent output (`receivingAddress`). The fallback chain is valid in practice but opaque from the code. — §1.4 §1.7
 
@@ -251,3 +251,25 @@ scripts/validate-sql.ts                   → shared
 - [ ] **What does 1Click do with the ZEC between deposit and swap?** — From PAL's perspective, ZEC goes into the deposit address and USDC comes out at `swapWallet`. The internal mechanism (NEAR Intents, solver auction, bridging protocol) is opaque to PAL. Task 10 must analyze 1Click's own documentation and NEAR Intents architecture. — §3.1
 
 - [ ] **Does 1Click support zaddr (shielded) deposit addresses, or only t-addresses?** — Critical for PAL's privacy claim. If deposit addresses are t-addresses, the "Zcash shielded" marketing is entirely false even at L1. Task 10 must determine this from 1Click API docs or test responses. — §3.1
+
+---
+
+### NEW claims from Task 6 (NEAR Chain Signatures — §1.6)
+
+#### §1.6 — Chain Signatures implementation (resolved and new)
+
+- [x] **`lib/kdf.ts` is NEAR Chain Signatures path derivation, NOT Zcash KDF** — CONFIRMED (verdict A): `lib/kdf.ts:26-50` implements the NEAR MPC epsilon derivation formula: `scalar = sha3_256("near-mpc-recovery v0.1.0 epsilon derivation:${signerId},${path}")`. `bech32` usage is Cosmos-only (`lib/kdf.ts:163-165`); `bs58check` is Bitcoin/Dogecoin-only (`lib/kdf.ts:82-107`). Zero Zcash address logic. — §1.6 §7
+
+- [x] **`MPC_PATH` is hardcoded `'base-1'` — derivationPath parameter is silently ignored** — CONFIRMED: `lib/chainSig.ts:18` — `const MPC_PATH = 'base-1'`. `deriveAddressAndPublicKey(derivationPath?)` at `lib/chainSig.ts:87-103` ignores the parameter; `lib/chainSig.ts:94` — `const path = 'base-1'` overwrites it. All users and intents share a single swapWallet EVM address. — §1.6
+
+- [x] **`signX402TransactionWithChainSignature()` calls MPC twice** — CONFIRMED: MPC #1 at `lib/chainSig.ts:147-152` (EIP-712 TransferWithAuthorization hash) and MPC #2 at `lib/chainSig.ts:372-377` (legacy EVM tx hash). Both use path `'base-1'` and `keyType: 'Ecdsa'`. — §1.6
+
+- [x] **`lib/near.ts` is a legacy standalone module — not used by `lib/chainSig.ts` production path** — CONFIRMED: `lib/chainSig.ts` does not import from `lib/near.ts`. `lib/chainSig.ts` uses `@near-js/accounts`, `@near-js/crypto`, `@near-js/providers`, `@near-js/signers` directly and `chainsig.js` for MPC calls. `lib/near.ts` defines its own `sign()` function using `near-api-js` directly — this is the original implementation before the chainsig.js refactor. `lib/near.ts` is unused in the current codebase production paths. — §1.6
+
+- [x] **NEAR proxy ECDSA key is held in plaintext env var — trust model implication** — CONFIRMED: `lib/chainSig.ts:29` — `const privateKey = process.env.NEAR_PROXY_PRIVATE_KEY as KeyPairString`. Anyone with this key can request MPC signatures for any payload under any derivation path, effectively controlling the swapWallet EVM address. The EVM key is protected by MPC threshold; the NEAR key is not. — §1.6
+
+- [x] **No retry logic in `chainSignatureContract.sign()` calls** — CONFIRMED: `lib/chainSig.ts:154-157` and `lib/chainSig.ts:381-384` — both throw immediately on empty/null signature response. Retry happens only at cron scheduling level (next 1-minute invocation), not within the same execution. — §1.6
+
+- [x] **`lib/chainSig.ts` broadcasts the tx itself — §1.7 (x402 client) does NOT receive a signed payload to broadcast** — CONFIRMED: `lib/chainSig.ts:394-401` — `publicClient.sendRawTransaction()` called inside `signX402TransactionWithChainSignature()`. The x402 payment is complete (on-chain) before the cronjob function receives the tx hash. — §1.6 §1.7
+
+- [ ] **Is the x402 flow EIP-3009 (transferWithAuthorization) or standard EIP-712?** — Both: `lib/chainSig.ts:241-265` constructs a `TransferWithAuthorization` EIP-712 typed struct. The USDC `transferWithAuthorization` function is the settlement mechanism. This is EIP-3009 built on EIP-712. Task 7 (§1.7) must verify what the x402 facilitator/server expects vs what PAL actually sends. — §1.7
