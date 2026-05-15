@@ -1,6 +1,8 @@
 # Zchat — 시나리오별 Sequence Diagrams
 
 > 코드 흐름을 시각화한 mermaid sequenceDiagram 모음. 각 시나리오의 자세한 분석은 해당 §1.X 참조.
+>
+> ⚠️ **2026-05-16 정정**: Scenario 3 (Ratchet) + 11 (Time-lock) + 15 (Identity) 에 *forward secrecy 부재 / plaintext on-chain / ADDR 미구현* 보안 caveat 추가됨. 코드 기반 정확한 동작은 [`corrections-log.md`](./corrections-log.md) 참조.
 
 ## 참여자 약식 표기
 
@@ -160,6 +162,10 @@ sequenceDiagram
 ## Scenario 3 — Ratchet root 도출 + 첫 ratchet 메시지
 
 > KEX/KEXACK 완료 후 첫 ratchet 메시지를 보내는 시점. 양쪽이 같은 root + chain key 도출 (deterministic). `getOrCreateMessageProcessor`가 처음으로 non-null processor 반환.
+>
+> ⚠️ **보안 caveat (2026-05-16 정정)**: `chain_key` 가 어디에도 저장되지 않고 매번 root 에서 *stateless 재도출* 됨 (`E2ERatchet.kt:133-153`). 진정한 forward secrecy 부재 — rootKey 또는 그 재도출 입력값 (priv/pub/txid) leak 시 모든 메시지 복호화 가능. ratchet layer 가 실제로 제공하는 것은 *replay 보호 + AAD 무결성 + nonce 충돌 방지* 만 (transport-level integrity). 자세한 내용은 [`corrections-log.md` §A](./corrections-log.md).
+>
+> ⚠️ **추가 정정**: `isLower` 계산이 *compressed secp256r1 bytes* 비교가 아니라 **Base64 인코딩된 X.509 SubjectPublicKeyInfo 의 Kotlin String 비교** (`ChatViewModel.kt:1639`). 아래 다이어그램의 `compress(A_pub) < compress(B_pub)` 표기는 부정확 — `ourPub < peerPub` (Base64 string compare) 로 읽어야 함.
 
 ```mermaid
 sequenceDiagram
@@ -680,6 +686,43 @@ sequenceDiagram
 ## Scenario 11 — Time-lock 메시지 (Payment-gated) + Unlock
 
 > Alice가 "10000 zatoshi 결제 받으면 해제되는" 메시지 송신. Bob이 결제하면 메시지 본문 노출.
+>
+> ⚠️ **보안 caveat (2026-05-16, 코드 verify 완료)**: ZTL 메시지는 **plaintext 그대로 on-chain memo 에 박힘.** `sendPaymentLockedMessage` (`ChatViewModel.kt:3306-3324`) 가 `createPaymentLockedMessage(message=plaintext)` + `createChunkedMessageProposal(rawMemo=true)` — ratchet wrap *없음*. `ChatMessage.text` 필드에 plaintext 그대로 저장되고 (`ChatViewModel.kt:1037`), UI 의 `displayText` getter (`ChatMessage.kt:133-138`) 만 `isLocked` 일 때 lock emoji 로 가림. ⇒ **viewing key 보유자가 zchat 앱을 우회하면 (다른 wallet 으로 시드 복원, zcashd RPC 등) plaintext 즉시 노출. payment 0건으로 메시지 확보 가능.** Zcash shielded pool 의 script 미지원으로 protocol-level enforcement 자체가 불가능. ZUNLOCK 의 answer 도 plaintext on-chain (`ChatViewModel.kt:3409`). [`corrections-log.md` §B](./corrections-log.md).
+
+### Scenario 11b — 우회 시나리오 (코드 검증된 약점)
+
+```mermaid
+sequenceDiagram
+    actor Alice as Alice
+    actor Bob as Bob (수신자)
+    participant Chain as Zcash mainnet
+    participant Zchat as Zchat 앱 (Bob)
+    participant Other as 다른 wallet<br/>(Zashi / Zingo / zcashd RPC)
+
+    Alice->>Chain: ZTL|PAY|10000|<hash>|"Secret content!"
+    Note over Chain: Zcash 노트 암호화 (receiver IVK 로 풀림)<br/>memo 안의 ZTL 문자열은 plaintext
+
+    rect rgb(255, 240, 240)
+        Note over Bob,Zchat: 정상 경로 (zchat 앱 UI)
+        Bob->>Zchat: 메시지 열기
+        Zchat->>Chain: receiver IVK 로 노트 복호화
+        Chain-->>Zchat: memo = "ZTL|PAY|10000|<hash>|Secret content!"
+        Zchat->>Zchat: parseTimeLock → isUnlocked=false
+        Zchat-->>Bob: 🔒 "Pay 0.0001 ZEC to reveal"
+        Note over Bob: ChatMessage.text 에는 plaintext 이미 있음<br/>UI displayText getter 만 가림
+    end
+
+    rect rgb(240, 255, 240)
+        Note over Bob,Other: 우회 경로 — payment 안 함
+        Bob->>Other: 같은 BIP-39 24 단어로 복원
+        Other->>Chain: 동일 receiver IVK 로 노트 복호화
+        Chain-->>Other: memo = "ZTL|PAY|10000|<hash>|Secret content!"
+        Other-->>Bob: 트랜잭션 history에 raw memo 표시
+        Note over Bob: 🔓 plaintext "Secret content!" 노출<br/>0 ZEC 결제로 메시지 확보
+    end
+```
+
+### Scenario 11a — 정상 unlock flow (참고용, app UI 가 enforce 한다는 가정 하)
 
 ```mermaid
 sequenceDiagram
@@ -832,7 +875,9 @@ sequenceDiagram
 
 ## Scenario 15 — Identity Regeneration (DEC-016) + ADDR migration
 
-> Alice가 새 "Business" identity 생성 + 활성 전환. 기존 contacts에게 *수동으로* ADDR broadcast (현재 자동화 미구현).
+> Alice가 새 "Business" identity 생성 + 활성 전환. 기존 contacts에게 ADDR broadcast.
+>
+> ⚠️ **보안 caveat (2026-05-16, 코드 verify 완료)**: **ADDR broadcast 부분이 완전 미구현 (TODO).** `ChangeIdentityVM.sendAddressChangeNotifications` (`ChangeIdentityVM.kt:213-232`) 가 `Log.d` 만 호출하고 실제 ADDR 메시지 송신 *안 함*. `createV4ADDRMessage` 함수 자체는 정의되어 있지만 (`ZMSGProtocol.kt:305`) production code 에서 호출 site **0건**. 또한 incoming ADDR 메시지를 처리하는 `parseADDRMessage` caller 도 production 에 없음 (test 파일만). 즉 새 identity 활성 시 **기존 contacts 는 새 메시지를 *모르는 sender* 로 받게 됨** — 자동 migration 자체가 없음. 아래 다이어그램의 "ADDR broadcast (옵션)" 부분은 *가설적 시나리오* 임을 명시.  [`corrections-log.md` §D](./corrections-log.md).
 
 ```mermaid
 sequenceDiagram

@@ -1,5 +1,7 @@
 # §1.6 메시지 송신/수신 흐름 (Layer C → B → A)
 
+> ⚠️ **2026-05-16 정정**: Plaintext fallback 정책의 세부가 부정확했음. **`getOrCreateMessageProcessor` 가 null 반환 시 (KEX 미완료 / E2E disabled / 자기 또는 peer pubkey 없음) 사용자 알림 없이 plaintext 송신** — silent fallback. *encryption 자체 실패* 시에만 abort 가 적용. `getOrCreateMessageProcessor` 의 정확한 null 조건 (`ChatViewModel.kt:1634-1638`) 과 plaintext fallback 코드 (`ChatViewModel.kt:2499-2501`) 를 추가 명시. [`../corrections-log.md` §G.3](../corrections-log.md).
+
 ## 목적 (Purpose)
 
 `ChatViewModel`은 zchat의 모든 1:1 메시지 라이프사이클을 통합한다 — 송신 path(UI → 옵티미스틱 pending → ZMSG → Ratchet → ZIP-321 → SDK → JNI → lightwalletd) + 수신 path(SDK `transactions` Flow → debounce → memo extract → ZMSG parse → E2E decrypt → ChatMessage → state flow → UI). 또한 KEX 핸드셰이크 시작/응답, ratchet root 도출, 그룹 메시지 dispatch, payment request·time-lock·reaction·remote-kill 같은 special types 처리, 1분 auto-refresh + 15분 WorkManager + ForegroundService 백그라운드 sync, message queue retry policy까지 모두 이 layer가 담당한다. **Layer C → Layer B → Layer A 위임 경계의 단일 진입점**이라는 점이 가장 중요한 특성이다.
@@ -36,7 +38,7 @@
 - `:2429` — `private fun doSendMessage(peerAddress, message, amountZatoshi, existingPendingId, retryCount)` — 핵심 송신 로직
   - `:2447-2467` — pending message 즉시 추가 + prefs 영구화 (`addPendingMessage`)
   - `:2474` — `convIdMutex.withLock { zchatPreferences.getOrCreateConversationId(peer) }` — convID 동기 생성
-  - `:2495-2501` — `getOrCreateMessageProcessor(peer, convId)` 호출 후 `processor.encryptOutgoing(message)` (§1.3) — **encryption 실패 시 abort, silent plaintext fallback 없음**
+  - `:2495-2501` — `getOrCreateMessageProcessor(peer, convId)` 호출 후 `processor.encryptOutgoing(message)` (§1.3). **두 가지 분기**: (a) processor null (KEX 미완료 등) → message 그대로 송신 = **silent plaintext fallback**. (b) processor 있는데 `encryptOutgoing` throw → outer try/catch 가 catch 후 사용자에게 error 알림. 즉 "encryption *실패* 시 abort" 는 정확하지만 "*KEX 미완료* 시" 는 plaintext 가 silent 로 나감. processor null 조건은 `ChatViewModel.kt:1634-1638` 참조 (4가지: sharedKey 없음 / E2E disabled / ourPub 없음 / peerPub 없음).
   - `:2505-2518` — `withContext(Dispatchers.Default) { createChunkedMessageProposal(...) }` — proof generation을 Default dispatcher로 — Main thread는 UI recomposition 유지
   - `:2527-2607` — error handling: insufficient balance 분류, queue retry, MAX_QUEUE_RETRIES 도달 시 FAILED
 - `:2616` — `private fun processNextQueuedMessage()` — 큐 head 꺼내서 doSendMessage 호출

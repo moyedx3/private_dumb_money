@@ -1,8 +1,21 @@
 # §1.3 Double Ratchet (forward secrecy)
 
+> ⚠️ **2026-05-16 대규모 정정.** 이 파일의 초기 분석에 *forward secrecy* 표현 + *BIP-39 trade-off* 설명이 부정확했음. 정확한 코드 기반 결론은 [`../corrections-log.md` §A](../corrections-log.md) 참조. 본문은 정정된 표현으로 갱신됨.
+
 ## 목적 (Purpose)
 
-Ratchet 서브시스템은 §1.2의 정적 ECDH derived key 대신 **per-message key**를 도출해 forward secrecy를 제공한다. 다만 **이것은 Signal의 Double Ratchet이 아니라 symmetric ratchet (KDF chain only)** — DH 재교환(DH ratchet) 단계가 *없다*. Root key는 KEX 시 1회 도출(`ECDH || optional PSK` → HKDF with KEX/KEXACK txid info)되고 영구적이며, 이후 각 방향(A2B / B2A)의 chain key가 HMAC-SHA256 한 단계씩 advance한다. 이 디자인은 **BIP-39 seed 복원 호환성**(root을 deterministic하게 다시 만들 수 있어야 함)을 위한 의도적 trade-off로, ZMSG_PROTOCOL_SPEC.md가 "Megolm-style / session-level FS per KEX epoch — no post-compromise security"라고 명시한 이유다.
+본 서브시스템은 §1.2 의 정적 ECDH derived key 대신 **per-message key 를 도출하는 stateless deterministic key schedule** 이다. 이름은 "ratchet" 이지만 코드 상으로는 *진정한 ratchet 의 핵심 성질 (사용 후 비가역적 상태 advance)* 이 **없다.** `chain_key` 가 어디에도 저장되지 않고 매 encrypt/decrypt 마다 `rootKey` 에서 stateless 로 재도출되므로, rootKey 와 counter 만 알면 어떤 시점의 message key 든 즉시 도출 가능하다.
+
+**이 layer 가 실제로 제공하는 보호 (코드 verify 됨):**
+1. Replay 보호 (counter window, `MAX_SKIP = 1000`) — `E2ERatchet.kt:78-89, 221`
+2. Cross-conversation routing 방지 (AAD 에 convId 포함) — `E2ERatchet.kt:167-171`
+3. AES-GCM nonce 충돌 방지 (counter-based nonce + `.commit()` synchronous) — `EncryptedPrefsRatchetStateStore.kt:30-36`
+
+**이 layer 가 제공하지 *않는* 보호:**
+- 전통적 forward secrecy (사용 후 비가역적 폐기) — chain_key advance + wipe 가 없음. rootKey 또는 그 재도출 입력값 (priv key + peer pub + KEX/KEXACK txid) leak 시 모든 메시지 복호화 가능.
+- Post-compromise security — DH ratchet 단계 없음.
+
+이 디자인의 진짜 동기는 **BIP-39 seed 복원 호환성이 아니라 rescan idempotency + 구현 단순성** ([§A.8](../corrections-log.md) 참조).
 
 ## 파일과 함수 (Files & functions)
 
@@ -260,10 +273,16 @@ JSON schema (line 43):
 
 ## 노트 / quirks / footguns
 
-- **Signal Double Ratchet 아님.** 코드 주석에 "symmetric ratchet"이라고 정직하게 명시(line 12-14). DH ratchet 없음 → post-compromise security 없음. root key가 leak되면 *이후 모든 메시지* 복호화 가능 (직전 메시지뿐 아니라 영구). MESSAGING_CRYPTO.md §1 "Receiver IVK leak 시 과거 메시지 노출 → Double Ratchet으로 방어"는 *forward* 방향만 정확.
-- **Forward secrecy는 진짜다.** message key가 매번 새로 도출(HMAC chain step) + 사용 후 메모리에서 폐기. chain key 자체도 한 단계씩 advance하여 과거 chain key 복원 불가. 따라서 "현재 root + 현재 chain key" leak되어도 과거 *message key*는 복원 불가 — 단, 과거 message가 보존되어 있고 chain key 복원이 *future* 방향이라면 도달 가능. 정확히 표현하면 *partial FS within an epoch*.
+- **Signal Double Ratchet 아님 — 사실은 *ratchet 자체도 아님*.** 코드 주석에 "symmetric ratchet" 이라고 표현되어 있지만(line 12-14), 진정한 ratchet 의 핵심 성질 (chain_key 의 비가역적 advance + 이전 값 wipe) 이 *없다*. `deriveMessageKey` 가 매번 chain_key_0 부터 stateless walk — rootKey 만 있으면 어떤 counter 든 즉시 도출 가능. **MESSAGING_CRYPTO.md §1 "Receiver IVK leak 시 과거 메시지 노출 → Double Ratchet으로 방어" 표현은 부정확** — ratchet layer 가 추가로 보장하는 FS 가 없으므로 receiver IVK leak 만으로는 노트가 풀리고, *추가로* E2E priv key + peer pub + KEX/KEXACK txid 까지 leak 되면 rootKey 재도출 → 모든 메시지 평문. ([corrections-log §A.3](../corrections-log.md))
+- **Forward secrecy 사실상 부재.** chain_key 가 advance + wipe 되지 않으므로 일반적 FS 정의 (사용 후 비가역적 폐기) 충족 안 함. Code references:
+  - `messageProcessors: ConcurrentHashMap` (`ChatViewModel.kt:182`) 가 rootKey 보유한 `E2EMessageProcessor` 인스턴스를 *앱 수명 동안* 캐시.
+  - `RatchetConversationState` 스키마 (`RatchetStateStore.kt:12-18`) 에 chain_key 필드 없음 — counter + seen sets 만.
+  - prefs leak (E2E priv + peer pub + KEX txid) → rootKey 재도출 가능 (`ChatViewModel.kt:1624-1668`).
+  - 즉 "ratchet 으로 FS 보장" 라벨은 정확하지 않음. ([corrections-log §A.1, A.2, A.3](../corrections-log.md))
 - **`docs/superpowers/specs/2026-04-12-e2e-ratchet-deterministic-design.md`** 가 정식 설계 문서 (코드 주석 line 13). 더 자세한 보안 분석을 보려면 그 파일 참조. 본 dive scope에서는 외부 reference로만 명시.
-- **`isLower` 결정 책임은 caller (ChatViewModel)에 있다.** Ratchet 자체는 단순히 `Byte`를 받음. caller 잘못 계산하면 양쪽이 같은 chain을 쓰게 되어 catastrophic — Counter conflict. 코드 주석(line 20)이 "compressed secp256r1 public key … lexicographic"으로 명시했지만 실제 비교 코드는 ChatViewModel 또는 다른 곳 (§1.6에서 확인 필요).
+- **`isLower` 결정 책임은 caller (ChatViewModel) 에 있다.** Ratchet 자체는 단순히 `Byte` 를 받음. `ChatViewModel.kt:1639`: `val isLower = ourPub < peerPub` — **Base64 인코딩된 X.509 SubjectPublicKeyInfo 의 Kotlin String 비교**. 코드 주석 (E2ERatchet.kt:20) 의 "compressed secp256r1 public key lexicographic" 표현은 정확하지 않음 (compressed bytes 가 아니라 Base64 string). 결과는 lex-compare 와 동일하지만 비교 대상 표현이 다름. ([corrections-log §A.4](../corrections-log.md))
+- **KEX/KEXACK txid empty fallback 존재.** prefs 에 `E2EKexTxId` / `E2EKexAckTxId` 가 없으면 (claude.md 의 이전 버전과의 호환) `ByteArray(0)` 로 root 도출 (`ChatViewModel.kt:1644-1647`). 이 경우 같은 두 사람의 다른 conversation 이 같은 root 를 가질 수 있어 *re-KEX 시 root rotation 보장*이 약화됨. ([corrections-log §A.5](../corrections-log.md))
+- **`tryDecryptMessage` fail-open 정책.** decrypt 실패 시 UI 에 emoji placeholder 표시 (`ChatViewModel.kt:1675-1687`): ReplayDetectedException → "🔒 Encrypted message", 기타 exception → "🔐 Encrypted message (unable to decrypt)". processor 가 null 인 경우 (KEX 미완료) 는 content 그대로 통과 = plaintext 표시. ([corrections-log §A.6](../corrections-log.md))
 - **`seenCountersA2B/B2A` 필드는 persisted state schema에 있지만 사용 안 됨.** EncryptedPrefsRatchetStateStore는 빈 배열로 serialize/deserialize. 향후 더 강한 replay 보호(across-restart)를 위한 reserve로 보임. 우리 팀이 채택 시 어떻게 사용할지 검토.
 - **MAX_SKIP = 1000 이지만 *session* basis.** receiver가 앱을 껐다 켜면 session set이 reset되어 maxSeen이 0L부터 다시 시작 — 즉 counter 500인 메시지를 받고 앱을 끄고 다음 session에서 counter 1500 메시지가 와도 (1500 - 0) > 1000이면 reject. 결과적으로 long-offline 후 따라잡기 어려울 수 있음 — 코드는 그러나 first re-scan 시 maxSeen이 message stream 따라 자연스럽게 갱신되므로 실용적 문제 작다.
 - **Skipped key cache 없음.** Signal과 달리 zchat은 out-of-order 메시지를 받으면 매번 chain key를 처음부터 walk. 1000개의 미수신 메시지가 buffer에 있다가 reverse order로 처리되면 1000² HMAC operations 발생. 우리 팀 차별화로 lazy skipped-key cache 추가 가능.
@@ -276,15 +295,11 @@ JSON schema (line 43):
 ## 답한 open question
 
 - **Q5** (research-plan §7): "Double Ratchet의 root key는 BIP-39 seed restore와 어떻게 호환?"
-  > **Answer:** Root는 의도적으로 **deterministic** — `HKDF(ECDH_secret || optional_psk, salt="ZCHAT_RATCHET_ROOT_V1", info=sha256(kex_txid || kexack_txid), 32)`. 새 디바이스에서 같은 BIP-39 seed로 복원 시:
-  > 1. seed → ZIP-32로 Zcash UA / E2E keypair 모두 동일 복원
-  > 2. recipient viewing key로 blockchain 스캔하면 자신의 KEX/KEXACK 트랜잭션 발견 + sender pubkey 복원
-  > 3. 자기 priv key + 복원한 sender pubkey로 ECDH = 동일 shared secret
-  > 4. KEX/KEXACK txid는 blockchain에서 그대로 보임
-  > 5. PSK는 prefs에서 복원 (또는 없는 채로 derive — PSK 없는 root)
-  > 6. → 동일 root 도출 → 동일 ratchet
+  > **Answer (정정됨):** Root 는 deterministic 으로 *재도출 가능* — `HKDF(ECDH_secret || optional_psk, salt="ZCHAT_RATCHET_ROOT_V1", info=sha256(kex_txid || kexack_txid), 32)`. rootKey 자체는 prefs 에 저장되지 *않음* — 메모리 캐시 (`messageProcessors`) 만. 새 디바이스에서 BIP-39 seed 로 복원 시 입력값 (priv/pub/txid/psk) 이 prefs 로부터 복원되거나 blockchain rescan 으로 발견되어 root 재도출 가능.
   >
-  > 그러나 **counter state는 prefs**. 새 디바이스에서 prefs가 빈 상태로 시작하면 `nextCounterA2B = 0`부터 시작 → 이미 송신한 counter들과 GCM nonce 충돌 (**catastrophic**). 그래서 **multi-device 명시적 미지원** (`ZMSG_PROTOCOL_SPEC.md` Known Gaps). 동일 seed를 두 디바이스에 동시 활성화 금지. — `E2ERatchet.kt:247-261`, `EncryptedPrefsRatchetStateStore.kt:30-36`
+  > **단, BIP-39 복원이 stateless schedule 선택의 진짜 이유가 아님.** Signal 식 stateful ratchet 으로도 BIP-39 복원 양립 가능 (blockchain 메시지 순차 replay + skipped key cache). zchat 의 진짜 동기는 **rescan idempotency + 구현 단순성** — re-scan 시 같은 메시지를 *임의 순서로, 몇 번이고* decrypt 해도 같은 plaintext 보장이 필요. stateless 가 이를 trivially 만족.
+  >
+  > **Multi-device 미지원의 진짜 이유:** counter state 가 prefs 에 있어 두 device 가 같은 counter 부터 송신 시도 시 GCM nonce 충돌. ([corrections-log §A.8](../corrections-log.md)) — `E2ERatchet.kt:247-261`, `EncryptedPrefsRatchetStateStore.kt:30-36`
 
 - **Q4 (partial)** (research-plan §7): "Replay 보호"
   > **Answer:** Session-scoped seen-counter sets (`sessionSeenA2B/B2A`)가 in-memory만 — **restart 시 비워짐**. 같은 session 내에서 same (direction, counter) 재수신 시 `ReplayDetectedException`. Counter가 `maxSeen + 1000` 초과 시 `CounterOutOfRangeException` (DoS bound). 자기 outgoing 메시지에는 replay 검사 우회 — re-scan 시 자기 ciphertext 재복호화 가능하게 (deterministic chain의 활용). 즉 **session-level replay protection only** — 첫 메시지의 cross-session replay는 catch 못 함. — `E2ERatchet.kt:70-104, 221`

@@ -1,5 +1,7 @@
 # §1.7 컨택트북 + 주소 캐시 + Identity Regeneration + Destroy PIN
 
+> ⚠️ **2026-05-16 정정**: (a) convID prefs key 형식 `peer_convid_<addr>` / `conv_<convId>` 는 **부정확** — 실제는 `"peer:<addr>"` / `"conv:<id>"` (콜론). (b) Identity Regen 의 ADDR migration 은 "수동 broadcast 가능 (가설적 UI)" 가 아니라 **완전 미구현 (TODO)** — `ChangeIdentityVM.sendAddressChangeNotifications` 가 `Log.d` 만 호출, `createV4ADDRMessage` caller 0건. (c) Destroy PIN / Remote kill phrase 는 단순 SHA-256 hash 가 아니라 **SecureHash (PBKDF2 600k iter, OWASP 2023, legacy SHA-256 backward compat 포함)**. [`../corrections-log.md` §D, §E, §F](../corrections-log.md) 참조.
+
 ## 목적 (Purpose)
 
 본 서브시스템은 zchat의 *local-only identity / contact 인프라*를 묶는다 — sender hash → unified address 매핑 캐시(diversified address 문제 처리), 사용자가 명시적으로 추가한 contact book(displayName + alias), DEC-016 **Identity Regeneration** ("masks" — 한 wallet 안에 여러 messaging identity), **Destroy PIN** (remote kill memo + 11단계 폭파 시퀀스). 모두 EncryptedSharedPreferences(또는 일반 SharedPreferences) 에만 저장 — **외부 서버 의존 0건**. 위 4가지 기능은 서로 prefs 파일이 다르고 독립적이지만 다 같이 "이 디바이스가 누구이며 누구를 안다"를 정의한다.
@@ -45,7 +47,7 @@
 본 서브시스템 scope에서는 *어떤 종류의 키를 저장하는지 카테고리*만 다룬다. 자세한 surface는 코드 자체 참조.
 
 - E2E keypair / E2E peer pub key / E2EKeyVersion (per peer) — KEX/Ratchet (§1.2 / §1.3) 의존 storage
-- ConvID bidirectional mapping (`peer_convid_<addr>` / `conv_<convId>`) — ZMSG v4 threading (§1.1)
+- ConvID mapping (`"peer:<addr>"` / `"conv:<id>"`, prefs file `"zchat_conv_mapping"`) — ZMSG v4 threading (§1.1). **한 peer 가 여러 convId 가질 수 있음** (의도된 design, `ZchatPreferences.kt:1287-1292`). [정정 2026-05-16]
 - KEX/KEXACK txid (`E2EKexTxId`, `E2EKexAckTxId`) per peer — Ratchet root 도출 (§1.3)
 - Ratchet state (별도 prefix `ratchet_state_<convId>`) — §1.3에서 backed by EncryptedSharedPreferences
 - Group state: GroupInfo / GroupMembers / GroupKey (epoch별) / GroupKeyEpoch / GroupMessageSequence / GroupDraft
@@ -57,7 +59,7 @@
 - Hidden message IDs (사용자가 숨긴 메시지)
 - Last worker sync timestamp
 - **Remote kill**: `remote_kill_enabled`, `remote_kill_amount`, `remote_kill_phrase_hash` (SHA-256 of phrase, not plaintext per claude.md v2.9.1 audit fix)
-- **Destroy PIN**: SHA-256 hashed (`verifyDestroyPin` API; plaintext `getDestroyPin` 제거됨 per claude.md)
+- **Destroy PIN**: SecureHash (PBKDF2WithHmacSHA256, 600k iter, OWASP 2023) 저장, 검증은 `verifyDestroyPin` API. legacy plain SHA-256 backward-compat. prefs key `"destroy_pin"`. plaintext `getDestroyPin` 제거됨 per claude.md v2.9.1. — `ZchatPreferences.kt:1133-1148`, `SecureHash.kt:22-86` [정정 2026-05-16: 단순 SHA-256 아님]
 
 ### `ui-lib/.../screen/chat/util/DestroyManager.kt` (295 lines)
 
@@ -185,7 +187,7 @@ ChangeIdentityVM이:
 
 기존 contact들은 이 새 address로부터의 메시지를 *모르는 sender*로 본다 → INIT 메시지 송신 시 그쪽 디바이스가 새 conversation 시작 또는 기존 conversation에 ADDR 메시지로 알릴 수 있음. ADDR wire format은 §1.1에서 정의되어 있고 사용자가 의도적으로 회전할 때 활용.
 
-> **`ChangeIdentityVM`의 자동 ADDR broadcast 여부는 본 dive scope에서 확인되지 않음.** 코드 분석 필요. 우리 팀 포팅 시 *명시적 graceful migration* (기존 contact들에게 ADDR 보내고 confirmation 대기) 패턴 권장.
+> **(정정 2026-05-16, 코드 verify)** `ChangeIdentityVM.sendAddressChangeNotifications` (`ChangeIdentityVM.kt:213-232`) 가 **TODO 처리 + `Log.d` 만 호출, 실제 ADDR 메시지 송신 안 함.** 함수 본체 마지막 줄: `android.util.Log.d("ChangeIdentityVM", "Would notify ${uniqueContacts.size} contacts...")`. `createV4ADDRMessage` 호출 site **0건** (Grep 결과: ChangeIdentityVM 의 *주석* 안에서 함수 이름 언급만). `parseADDRMessage` 도 production code 에서 호출 없음 (test 파일만). 즉 **ADDR migration 양방향 모두 미구현**. 우리 팀 포팅 시 *명시적 graceful migration* (기존 contact들에게 ADDR 보내고 confirmation 대기) 패턴 필요 — 거의 처음부터 구현.
 
 ### C. Remote Kill (Destroy PIN trigger)
 
@@ -198,7 +200,7 @@ destroyManager.setupRemoteKill(phrase = "my-secret-kill-12345", amountZatoshi = 
 
 `DestroyManager.setupRemoteKill` (line 238):
 - phrase 길이 ≥ 12 검증
-- `zchatPreferences.setRemoteKillPhrase(phrase)` → 내부적으로 SHA-256 hash로 변환 후 prefs `remote_kill_phrase_hash`에 저장 (plaintext NO, claude.md v2.9.1 audit fix)
+- `zchatPreferences.setRemoteKillPhrase(phrase)` → 내부적으로 **SecureHash (PBKDF2 600k)** 로 hash 후 prefs `KEY_REMOTE_KILL_PHRASE_HASH = "remote_kill_phrase_hash"` 에 저장 (plaintext NO, claude.md v2.9.1 audit fix). 코드 주석에 "SHA-256 hash" 라고 적힌 outdated 부분 있음 (line 959) — 실제 동작은 PBKDF2 — `ZchatPreferences.kt:1168-1173`, `SecureHash.kt:22-86` [정정 2026-05-16]
 - `setRemoteKillAmount(12345L)`, `setRemoteKillEnabled(true)`
 
 **2. 누군가 (또는 자기 자신) 가 kill 메시지 송신**

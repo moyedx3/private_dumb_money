@@ -1,5 +1,7 @@
 # §1.1 ZMSG 프로토콜 (memo transport encoding)
 
+> ⚠️ **2026-05-16 정정**: convID prefs key 형식 `peer_convid_<addr>` / `conv_<convId>` 표현이 부정확함을 코드 verify 로 확인. 실제는 `"peer:<addr>"` / `"conv:<id>"` (콜론 구분자, prefs file `"zchat_conv_mapping"`). 또한 한 peer 가 *여러 convId* 가질 수 있음 (의도된 design — 자기 송신용 + peer 가 만든 것). [`../corrections-log.md` §F](../corrections-log.md) 참조.
+
 ## 목적 (Purpose)
 
 ZMSG 서브시스템은 Zcash shielded transaction의 memo 필드(≤ 512B) 위에 채팅 메시지를 인코딩하기 위한 wire-level 프로토콜이다. 메모 1개에 들어가지 않는 메시지를 chunk로 쪼개어 multi-output transaction으로 보내고, 받은 chunk들을 transaction 단위로 재조립한다. v4(현재)는 8자 conversation ID로 양방향 threading을 안정시키며, v3 / v2는 backward-compat 파싱만 유지된다. 또한 KEX/KEXACK/ADDR 같은 control-plane 메시지와 ZREACT/ZRCPT/ZSTAT/ZTL/ZUNLOCK/ZREQ 같은 application-level 특수 메시지의 wire format도 이 layer에서 결정된다.
@@ -91,7 +93,7 @@ E2E 처리 후 ciphertext "E2E1:<base64>"를 받아서 `CreateChunkedMessageProp
 
 **2. convID 결정 — `ZchatPreferences.getConvId(peer) ?: ZMSGProtocol.generateConversationId()` (§1.7)**
 
-처음 보내는 경우 `peer_convid_<peerAddress>` 키 미존재. `generateConversationId()`가 8자 `[A-Z0-9]` 무작위 ID(예: `ABC12345`)를 만들고 bidirectional 저장.
+처음 보내는 경우 `peer:<peerAddress>` 키 미존재. `generateConversationId()`가 8자 `[A-Z0-9]` 무작위 ID(예: `ABC12345`)를 만들고 bidirectional 저장.
 
 ```kotlin
 // ZMSGProtocol.kt:139
@@ -107,7 +109,7 @@ fun generateConversationId(): String {
 
 **3. INIT 여부 결정**
 
-`peer_convid_<peerAddress>` 가 *방금* 생성됐으므로 첫 메시지 = INIT 형식. 그 이후는 Reply 형식.
+`peer:<peerAddress>` 가 *방금* 생성됐으므로 첫 메시지 = INIT 형식. 그 이후는 Reply 형식.
 
 **4. 청크 개수 계산 — `calculateV4ChunkCount(message, isInitMessage = true)` — `ZMSGProtocol.kt:434`**
 
@@ -232,7 +234,7 @@ val chunkedMemos = memos.filter { it.startsWith(PREFIX_V3C) || it.startsWith(PRE
 ## 답한 open question (Open questions answered for this subsystem)
 
 - **Q1** (research-plan §7): "ZMSG v4의 conversation ID는 양쪽 당사자에게 어떻게 동기화되는가?"
-  > **Answer:** 송신자가 `generateConversationId()`로 단독 생성하여 INIT 메시지의 wire format에 포함시키고(`ZMSG|v4|<convID>|INIT|...`), 수신자가 INIT을 받으면 ChatViewModel이 `ZchatPreferences`에 `conv_<convID>` → peerAddress와 `peer_convid_<peerAddress>` → convID 양방향 키로 저장한다 (§1.7). 즉 한방향 통보 모델이고, multi-device로 같은 시드를 쓰면 분기 가능. — `ZMSGProtocol.kt:139, 151`
+  > **Answer (정정됨 2026-05-16):** 송신자가 `generateConversationId()`로 단독 생성하여 INIT 메시지의 wire format에 포함시키고(`ZMSG|v4|<convID>|INIT|...`), 수신자가 INIT 을 받으면 `setConversationMapping` 으로 `"conv:<convID>"` → peerAddress 작성. **단 peer→convId 방향은 *기존 매핑 없을 때만* 작성** (`ZchatPreferences.kt:1297-1300`). 자기 송신용 convId 는 `getOrCreateConversationId` 에서 bidirectional 작성. **결과: 한 peer 가 *여러 convId* 가질 수 있음** (의도된 design, `ZchatPreferences.kt:1287-1292` 주석). prefs file = `"zchat_conv_mapping"`, key 형식 = `"peer:<addr>"` / `"conv:<id>"` (콜론 구분자). multi-device 로 같은 시드 쓰면 두 디바이스가 각자 다른 convId 생성 → desync. — `ZchatPreferences.kt:1240-1306`, `ZMSGProtocol.kt:139, 151`
 
 - **Q2** (research-plan §7): "INIT 메시지에 full sender address가 들어가는데, Zcash diversified address와 어떻게 호환되는가?"
   > **Answer:** INIT은 `senderAddress`를 cleartext로 포함하지만, 이 주소는 *송신자가 결정한 하나의 diversified address*이고 그것이 곧 conversation의 identity가 된다. 같은 사용자가 매번 다른 diversified로 INIT을 보내면 convID는 같더라도 receiver의 contact book에 다른 entry로 잡힐 수 있으며, 이를 해결하려고 v4 패턴 + ADDR 메시지(`createV4ADDRMessage`, line 305)가 도입됨 — 사용자가 의도적으로 주소를 회전할 때 사용. 우연히 다른 diversified로 보내는 경우의 자동 인식 메커니즘은 없다. — `ZMSGProtocol.kt:305, 619`
