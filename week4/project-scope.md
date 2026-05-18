@@ -1,7 +1,7 @@
 # Project Scope — "Unlockable Drop" on Zcash
 
 - **Status**: Scope decision (post-week-3 sync)
-- **Builds on**: [`회의록_week3.md`](./회의록_week3.md), [`pay-anyone-legend/`](./pay-anyone-legend/), [`zchat/`](./zchat/)
+- **Builds on**: [`week3/회의록_week3.md`](../week3/회의록_week3.md), [`week3/pay-anyone-legend/`](../week3/pay-anyone-legend/), [`week3/zchat/`](../week3/zchat/)
 - **Decision summary**: We keep Zcash. We narrow the original "private creator platform" to a **one-time encrypted content drop** with an indexer service designed so that **even a fully-logged, fully-compromised server learns nothing that breaks user privacy**.
 
 ---
