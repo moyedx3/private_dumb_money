@@ -414,4 +414,4 @@ Concrete first day of Phase 1: spend it doing a Phala "hello world" — get *any
 - Phala Cloud + NEAR Shade Agent template. [phala.com](https://phala.com/posts/near-shade-agent-template-phala-cloud)
 - ZIP-321 (payment request URI). [zips.z.cash/zip-0321](https://zips.z.cash/zip-0321)
 - Previous scope decision: [`project-scope.md`](./project-scope.md)
-- Week 3 research: [`../week3/회의록_week3.md`](../week3/회의록_week3.md), [`../week3/pay-anyone-legend/`](../week3/pay-anyone-legend/)
+- Week 3 research: [`../../week3/회의록_week3.md`](../../week3/회의록_week3.md), [`../../week3/pay-anyone-legend/`](../../week3/pay-anyone-legend/)
