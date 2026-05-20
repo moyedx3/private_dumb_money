@@ -69,6 +69,8 @@ flowchart LR
     S -->|"screening artifact<br/>no raw history"| E
 ```
 
+이 그림의 핵심은 scanner가 거래소 대신 scan을 수행한다는 점이다. 사용자는 viewing scope를 scanner에 제공하고, 거래소는 scanner가 만든 artifact만 검증한다.
+
 ## 실행 흐름
 
 1. 거래소가 screening request를 만든다.
@@ -117,6 +119,25 @@ flowchart LR
    - scan range가 맞는가?
    - result/proof가 valid한가?
 
+```mermaid
+sequenceDiagram
+    participant E as Exchange
+    participant U as User
+    participant S as Attested scanner
+    participant Z as Zcash chain
+
+    E->>U: screening request<br/>policy, sanctioned set, deposit intent
+    U->>S: verify attestation
+    U->>S: provide read-only viewing scope
+    S->>Z: scan complete block range
+    Z-->>S: compact blocks / chain data
+    S->>S: derive visible records<br/>check sanctioned set
+    S-->>E: screening artifact<br/>attestation, hashes, PASS/FAIL
+    E->>E: verify artifact and apply policy
+```
+
+이 sequence에서 raw wallet history가 거래소로 직접 이동하지 않는다는 점이 중요하다. 거래소는 scan 결과의 artifact와 attestation만 본다.
+
 ## 네 가지 버전
 
 | Version | 의미 | 용도 |
@@ -129,6 +150,20 @@ flowchart LR
 `Direct viewing key disclosure`는 가장 단순한 completeness 해결책이다. 거래소가 직접 scan하므로 사용자가 record를 누락하기 어렵다. 대신 거래소가 viewable history를 직접 보게 되므로 privacy-preserving 방향과 충돌한다.
 
 `Attested scanner MVP`는 이 disclosure를 줄이기 위한 중간 지점이다. 사용자는 viewing scope를 거래소가 아니라 attested scanner에 제공한다. scanner는 complete scan을 수행하되, 거래소에는 raw history가 아니라 screening artifact만 내보낸다.
+
+```mermaid
+flowchart LR
+    A["Mock JSON ZK proof<br/>privacy high<br/>completeness weak"]
+    B["Direct viewing key disclosure<br/>completeness strong<br/>privacy weak"]
+    C["Attested scanner MVP<br/>completeness practical<br/>privacy improved"]
+    D["Pure ZK full scan<br/>privacy strong<br/>implementation very hard"]
+
+    A --> C
+    B --> C
+    C --> D
+```
+
+이 프로젝트의 MVP 위치는 `Attested scanner MVP`이다. `Mock JSON ZK proof`의 completeness 문제와 `Direct viewing key disclosure`의 privacy 손실 사이의 절충안이다.
 
 ## ZK Circuit은 어디에 쓰이나
 

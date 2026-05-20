@@ -60,6 +60,8 @@ flowchart LR
     S -->|"screening artifact<br/>no raw history"| E
 ```
 
+The key point is that the scanner performs the scan instead of the exchange. The user gives the viewing scope to the scanner, while the exchange verifies only the scanner's artifact.
+
 ## Execution Flow
 
 1. The exchange creates a screening request.
@@ -108,6 +110,25 @@ flowchart LR
    - scan range matches.
    - result/proof is valid.
 
+```mermaid
+sequenceDiagram
+    participant E as Exchange
+    participant U as User
+    participant S as Attested scanner
+    participant Z as Zcash chain
+
+    E->>U: screening request<br/>policy, sanctioned set, deposit intent
+    U->>S: verify attestation
+    U->>S: provide read-only viewing scope
+    S->>Z: scan complete block range
+    Z-->>S: compact blocks / chain data
+    S->>S: derive visible records<br/>check sanctioned set
+    S-->>E: screening artifact<br/>attestation, hashes, PASS/FAIL
+    E->>E: verify artifact and apply policy
+```
+
+The important boundary is that raw wallet history does not move directly to the exchange. The exchange sees the artifact and attestation.
+
 ## Four Versions
 
 | Version | Meaning | Use |
@@ -120,6 +141,20 @@ flowchart LR
 `Direct viewing key disclosure` is the simplest way to solve completeness. The exchange scans directly, so it is hard for the user to omit records. The cost is privacy: the exchange sees viewable history.
 
 `Attested scanner MVP` is the middle path. The user provides the viewing scope to an attested scanner instead of the exchange. The scanner performs the complete scan, but exports only a screening artifact rather than raw history.
+
+```mermaid
+flowchart LR
+    A["Mock JSON ZK proof<br/>privacy high<br/>completeness weak"]
+    B["Direct viewing key disclosure<br/>completeness strong<br/>privacy weak"]
+    C["Attested scanner MVP<br/>completeness practical<br/>privacy improved"]
+    D["Pure ZK full scan<br/>privacy strong<br/>implementation very hard"]
+
+    A --> C
+    B --> C
+    C --> D
+```
+
+The MVP position is `Attested scanner MVP`: a practical compromise between the completeness weakness of mock JSON proofs and the privacy loss of direct viewing key disclosure.
 
 ## Where ZK Fits
 
