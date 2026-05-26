@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use tonic::transport::{Channel, ClientTlsConfig};
 
 pub mod proto {
+    #[allow(clippy::all, clippy::pedantic, clippy::nursery)]
     pub mod compact {
         tonic::include_proto!("cash.z.wallet.sdk.rpc");
     }
@@ -60,7 +61,7 @@ impl GrpcClient {
                     let c = self.connect(backup).await?;
                     f(c).await
                 } else {
-                    Err(connect_err.into())
+                    Err(connect_err)
                 }
             }
         }
