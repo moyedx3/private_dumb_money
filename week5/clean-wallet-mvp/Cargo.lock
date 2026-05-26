@@ -441,7 +441,6 @@ dependencies = [
  "async-trait",
  "axum 0.7.9",
  "hex",
- "hyper 1.9.0",
  "orchard",
  "prost 0.12.6",
  "sapling-crypto",

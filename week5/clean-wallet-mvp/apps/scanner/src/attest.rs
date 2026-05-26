@@ -111,6 +111,23 @@ async fn post_uds_json(
     let body_start = split + sep.len();
     let body_bytes = &result[body_start..];
 
+    // Parse the HTTP status line (first line of headers)
+    let header_bytes = &result[..split];
+    let status_line = header_bytes.split(|&b| b == b'\n').next().unwrap_or(&[]);
+    let status_line_str = std::str::from_utf8(status_line).unwrap_or("").trim();
+    // Format: "HTTP/1.1 200 OK"
+    let status_code: u16 = status_line_str
+        .split_whitespace()
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .ok_or_else(|| anyhow::anyhow!("dstack response: malformed status line: {status_line_str:?}"))?;
+    if !(200..300).contains(&status_code) {
+        let body_str = String::from_utf8_lossy(body_bytes);
+        return Err(anyhow::anyhow!(
+            "dstack HTTP {status_code} from {endpoint}: {body_str}"
+        ));
+    }
+
     let parsed: serde_json::Value = serde_json::from_slice(body_bytes)
         .map_err(|e| anyhow::anyhow!("dstack response not JSON: {e}; raw body: {:?}", String::from_utf8_lossy(body_bytes)))?;
     Ok(parsed)
