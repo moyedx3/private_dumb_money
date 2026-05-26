@@ -21,7 +21,9 @@ pub enum ScanError {
     #[error("invalid UFVK: {0}")]
     InvalidUfvk(String),
     #[error("lightwalletd error: {0}")]
-    Lightwalletd(#[from] anyhow::Error),
+    Lightwalletd(anyhow::Error),
+    #[error("internal error: {0}")]
+    Internal(anyhow::Error),
 }
 
 pub struct ScreenRequest<'a> {
@@ -60,7 +62,7 @@ pub async fn scan_and_screen(
     }
 
     // Fail-closed guard 4: range above chain tip
-    let tip = client.current_chain_tip().await?;
+    let tip = client.current_chain_tip().await.map_err(ScanError::Lightwalletd)?;
     if req.policy.audit_end_height > tip + 1 {
         return Err(ScanError::RangeAboveTip {
             end: req.policy.audit_end_height,
@@ -75,7 +77,8 @@ pub async fn scan_and_screen(
     // Fetch compact blocks for the audit range
     let blocks = client
         .fetch_block_range(req.policy.audit_start_height, req.policy.audit_end_height)
-        .await?;
+        .await
+        .map_err(ScanError::Lightwalletd)?;
 
     // Extract outgoing recipients from compact blocks under the UFVK's OVKs
     let recipients = extract_outgoing_recipients(req.ufvk_str, &blocks)
@@ -113,9 +116,9 @@ pub async fn scan_and_screen(
             start_height: req.policy.audit_start_height,
             end_height: req.policy.audit_end_height,
         },
-        policy_hash: policy_hash(req.policy).map_err(ScanError::Lightwalletd)?,
+        policy_hash: policy_hash(req.policy).map_err(ScanError::Internal)?,
         deposit_intent_hash: deposit_intent_hash(req.deposit_intent)
-            .map_err(ScanError::Lightwalletd)?,
+            .map_err(ScanError::Internal)?,
         viewing_scope_commitment: viewing_scope_commitment(&ivk_fp),
         recipient_count: recipients.len() as u32,
         sanctioned_hit_count: hit_count,
@@ -169,6 +172,10 @@ fn extract_outgoing_recipients(
     _ufvk_str: &str,
     _blocks: &[CompactBlock],
 ) -> Result<Vec<String>> {
+    tracing::warn!(
+        "extract_outgoing_recipients: placeholder active — \
+         recipient screening is a no-op until Task 10 implements full-tx OVK recovery"
+    );
     Ok(Vec::new())
 }
 
