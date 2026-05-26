@@ -61,6 +61,7 @@ Single-CVM "scanner-as-service" — chosen over a split prover/verifier design (
 
 - **Demo target:** live Zcash testnet scan + real Phala Cloud TEE attestation
 - **Scanner stack:** Rust + `zcash_client_backend` + `lightwalletd` (Sapling + Orchard pools, full UFVK)
+- **Lightwalletd endpoint:** `testnet.zec.rocks:443` (ECC LightWalletD, TLS-secured gRPC) as primary; a backup endpoint must be configured in the scanner because primary uptime is uneven (~69% over 7d, ~85% over 30d at time of spec). See §9 for failover semantics.
 - **ZK layer:** deferred to v2; the artifact is signed JSON bound to a hardware quote
 - **Demo data:** two pre-funded testnet UFVKs (one clean → PASS, one with a sanctioned-recipient hit → FAIL) + a curated sanctioned-address set
 - **Timeline:** ~1 week sprint; polish on the exchange-verifier UI (the demo punchline); user UI is minimal
@@ -69,7 +70,7 @@ Single-CVM "scanner-as-service" — chosen over a split prover/verifier design (
 ## 4. Repo Layout
 
 ```
-week4/clean-wallet-mvp/
+week5/clean-wallet-mvp/
 ├── apps/
 │   ├── scanner/                       # Rust binary; runs in the Phala CVM
 │   │   ├── Cargo.toml
@@ -123,6 +124,20 @@ week4/clean-wallet-mvp/
 - **`scanner/` is the only deployable.** Everything inside it gets measured by Intel TDX. Anything outside isn't trust-critical, so it doesn't need attestation discipline.
 - **`packages/schemas/` is the contract.** Rust types and TS types must serialize identically; the JSON Schemas + golden fixtures keep them honest.
 - **Demo data lives in the repo.** Testnet UFVKs are not secrets (testnet ZEC has no value); checking them in makes the demo reproducible by anyone who clones.
+
+### Scanner runtime configuration
+
+Environment variables passed to the scanner container via `docker-compose.yml`:
+
+| Variable | Example | Notes |
+|---|---|---|
+| `LIGHTWALLETD_PRIMARY` | `https://testnet.zec.rocks:443` | TLS gRPC endpoint; primary data source |
+| `LIGHTWALLETD_BACKUP` | `https://testnet.lightwalletd.com:9067` | Second endpoint; scanner falls over on connection failure or hash-link mismatch from primary |
+| `NETWORK` | `testnet` | Hard-checked against `policy.network` on each request (rejects with 400 if mismatch) |
+| `MAX_RANGE_BLOCKS` | `100000` | Caps the scan window; rejects oversized requests with 400 |
+| `DSTACK_SOCKET` | `/var/run/dstack.sock` | Default for Phala Cloud; overrideable for the `dstack-simulator` in CI |
+
+The lightwalletd endpoints are **not** in the Policy schema. Reason: with header-chain verification listed as future work, pinning the endpoint in the policy would imply a defense we don't yet have. Once header-chain verification ships, endpoint pinning becomes meaningful and can move into the policy. For MVP, the trust assumption "lightwalletd returns honest blocks" is documented at §9 as out-of-scope.
 
 ### What's deliberately out
 
@@ -310,8 +325,9 @@ Anywhere upstream of artifact emission, if anything goes wrong, the scanner emit
 | | `auditEndHeight - auditStartHeight > 100_000` | 400 | "Scan range too large for this scanner." |
 | | `auditEndHeight > currentTip + 1` | 400 | "Audit range exceeds current chain tip." |
 | | Another scan in flight | 429 | "Scanner busy, retry in a moment." |
-| Scanner — scan | lightwalletd unreachable | 503 | "Block source unreachable, retry." |
-| | gRPC stream interrupted partway | 503 | "Scan interrupted, retry." (no artifact emitted) |
+| Scanner — scan | Primary lightwalletd unreachable | (internal) | Fall over to `LIGHTWALLETD_BACKUP`; no error surfaced |
+| | Both lightwalletd endpoints unreachable | 503 | "Block source unreachable, retry." |
+| | gRPC stream interrupted partway (after failover attempt) | 503 | "Scan interrupted, retry." (no artifact emitted) |
 | | Block hash chain doesn't link | 502 | "Block source returned inconsistent data." |
 | | Zero outputs under UFVK | 200 (legitimate) | Artifact with `recipientCount: 0`. Not an error. |
 | Scanner — attestation | `dstack-sdk.getQuote()` fails | 503 | "Attestation hardware unavailable, retry." |
@@ -387,7 +403,8 @@ Must complete ≥24h before demo. Deploys actual Docker image to Phala Cloud, ru
 ### Demo rehearsal checklist (`docs/demo-script.md`)
 
 - [ ] Both demo UFVKs still have expected on-chain history
-- [ ] Public testnet lightwalletd reachable; backup URL configured
+- [ ] `testnet.zec.rocks:443` reachable (check hosh.zec.rocks status page right before demo — 7d uptime ~69% means a same-day check is mandatory)
+- [ ] Backup lightwalletd URL configured in scanner env; manually verified reachable
 - [ ] Phala CVM deployed and warm; policy `expectedScannerCodeMeasurement` matches deployed image
 - [ ] Both PASS and FAIL flows complete in <60s
 - [ ] proof.t16z.com renders the quote as genuine
@@ -428,3 +445,5 @@ These limits are part of the design and must be stated in the demo:
 | Canonical JSON | RFC 8785 JCS | CBOR; bespoke ordering | Spec exists in both languages; easy to test |
 | `viewingScopeCommitment` | Keep | Drop for MVP | Cheap to include; enables future UFVK↔artifact association |
 | `reportData` packing | Just `sha256(artifact)` | `sha256(artifact) ‖ nonce` | `depositIntentHash` already provides replay protection |
+| Lightwalletd endpoint | `testnet.zec.rocks:443` primary + configured backup | Run our own zebrad+lightwalletd; mainnet | Cheapest, most reliable for a 1-week sprint; mixed uptime mitigated by failover |
+| Endpoint location | Scanner env vars, NOT in policy | In policy | Endpoint pinning without header-chain verification would be theater; once verification ships, endpoint moves into policy |
