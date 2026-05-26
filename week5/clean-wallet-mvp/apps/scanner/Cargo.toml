@@ -1,0 +1,27 @@
+[package]
+name = "clean-wallet-scanner"
+version = "0.1.0"
+edition.workspace = true
+
+[dependencies]
+anyhow = "1"
+axum = "0.7"
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_jcs = "0.1"
+sha2 = "0.10"
+thiserror = "1"
+tokio = { version = "1", features = ["full"] }
+tonic = { version = "0.11", features = ["tls"] }
+tower = "0.4"
+tracing = "0.1"
+tracing-subscriber = "0.3"
+prost = "0.12"
+
+[build-dependencies]
+tonic-build = "0.11"
+
+[dev-dependencies]
+tokio-test = "0.4"
+hyper = "1"
