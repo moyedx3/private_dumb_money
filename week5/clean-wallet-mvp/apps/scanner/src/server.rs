@@ -8,6 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tower_http::cors::{Any, CorsLayer};
 
 use crate::attest::{Attestor, Quote};
 use crate::artifact::{artifact_hash_bytes, ScreeningArtifact};
@@ -56,6 +57,12 @@ impl From<Quote> for SerializableQuote {
 }
 
 #[derive(Serialize)]
+struct AttestationResponse {
+    code_measurement: String,
+    quote: SerializableQuote,
+}
+
+#[derive(Serialize)]
 struct ErrorBody {
     error: String,
 }
@@ -65,11 +72,16 @@ fn err(code: StatusCode, msg: &str) -> Response {
 }
 
 pub fn router(state: AppState) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods(Any)
+        .allow_headers(Any);
     Router::new()
         .route("/health", get(health))
         .route("/attestation", get(attestation))
         .route("/screen", post(screen))
         .layer(DefaultBodyLimit::max(16 * 1024))
+        .layer(cors)
         .with_state(state)
 }
 
@@ -80,7 +92,10 @@ async fn health() -> &'static str {
 async fn attestation(State(s): State<AppState>) -> Response {
     let report_data = [0u8; 32];
     match s.attestor.get_quote(&report_data).await {
-        Ok(q) => Json(SerializableQuote::from(q)).into_response(),
+        Ok(q) => Json(AttestationResponse {
+            code_measurement: s.scanner_code_measurement.clone(),
+            quote: SerializableQuote::from(q),
+        }).into_response(),
         Err(_) => err(
             StatusCode::SERVICE_UNAVAILABLE,
             "Attestation hardware unavailable, retry.",

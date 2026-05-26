@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
   if (!quoteVerification) {
     check1 = { ok: false, detail: "Quote verification not yet performed (call /api/verify-quote first)." };
   } else if (!quoteVerification.ok) {
-    check1 = { ok: false, detail: `Attestation is not genuine: ${quoteVerification.error ?? "unknown"}` };
+    check1 = { ok: false, detail: "Attestation is not genuine." };
   } else if (
     quoteVerification.codeMeasurement &&
     policy.expectedScannerCodeMeasurement &&
@@ -50,7 +50,7 @@ export async function POST(req: NextRequest) {
   ) {
     check1 = {
       ok: false,
-      detail: `Scanner code does not match the policy's expected version.\n  quote: ${quoteVerification.codeMeasurement}\n  policy: ${policy.expectedScannerCodeMeasurement}`,
+      detail: "Scanner code does not match the policy's expected version.",
     };
   } else {
     check1 = { ok: true, detail: "Quote is genuine; code measurement matches policy." };
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
   } else if (!reportDataBindsArtifact(quoteVerification.reportData, aHash)) {
     check2 = {
       ok: false,
-      detail: `Attestation seal does not match this report.\n  computed:    ${aHash}\n  reportData:  ${quoteVerification.reportData}`,
+      detail: "Attestation seal does not match this report.",
     };
   } else {
     check2 = { ok: true, detail: "Attestation seal matches this report." };
@@ -75,21 +75,21 @@ export async function POST(req: NextRequest) {
   const dHash = depositIntentHash(depositIntent);
   const problems: string[] = [];
   if (artifact.policyHash.toLowerCase() !== pHash.toLowerCase()) {
-    problems.push(`policyHash mismatch (artifact: ${artifact.policyHash}, computed: ${pHash})`);
+    problems.push("Report is for a different screening policy.");
   }
   if (artifact.depositIntentHash.toLowerCase() !== dHash.toLowerCase()) {
-    problems.push(`depositIntentHash mismatch`);
+    problems.push("Report is not for this deposit.");
   }
   if (
     artifact.scanRange.network !== policy.network ||
     artifact.scanRange.startHeight !== policy.auditStartHeight ||
     artifact.scanRange.endHeight !== policy.auditEndHeight
   ) {
-    problems.push(`scanRange mismatch`);
+    problems.push("Report covers a different scan range than the policy requires.");
   }
   const now = Math.floor(Date.now() / 1000);
   if (now > depositIntent.expiryUnix) {
-    problems.push(`deposit intent expired (now=${now}, expiry=${depositIntent.expiryUnix})`);
+    problems.push("Deposit intent expired before verification.");
   }
   const check3: CheckResult = problems.length
     ? { ok: false, detail: problems.join("\n  ") }

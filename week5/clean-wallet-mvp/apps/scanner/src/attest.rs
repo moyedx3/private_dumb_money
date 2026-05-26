@@ -69,9 +69,9 @@ impl Attestor for DstackAttestor {
             .ok_or_else(|| anyhow::anyhow!("dstack info: missing 'mrtd' field"))?;
 
         let normalized = if mrtd.starts_with("0x") {
-            mrtd.to_string()
+            mrtd.to_lowercase()
         } else {
-            format!("0x{}", mrtd)
+            format!("0x{}", mrtd.to_lowercase())
         };
         Ok(Info { code_measurement: normalized })
     }

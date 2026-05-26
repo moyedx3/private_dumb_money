@@ -18,10 +18,8 @@ export default function ProverPage() {
   async function checkAttestation() {
     setError(""); setAttestationStatus("checking…");
     try {
-      const q = await fetchAttestation(scannerUrl);
-      const measurement = (q.vm_config as { measurement?: string })?.measurement
-        ?? "(unknown — verify via dstack-verifier)";
-      setScannerMeasurement(measurement);
+      const resp = await fetchAttestation(scannerUrl);
+      setScannerMeasurement(resp.code_measurement);
       setAttestationStatus("scanner returned a quote; verify the code measurement below matches your policy.expectedScannerCodeMeasurement before uploading your UFVK.");
     } catch (e) {
       setError(String(e));

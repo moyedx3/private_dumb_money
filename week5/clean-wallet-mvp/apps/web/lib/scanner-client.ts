@@ -14,7 +14,12 @@ export type ScreenResponse = {
   quote: Quote;
 };
 
-export async function fetchAttestation(scannerUrl: string): Promise<Quote> {
+export type AttestationResponse = {
+  code_measurement: string;
+  quote: Quote;
+};
+
+export async function fetchAttestation(scannerUrl: string): Promise<AttestationResponse> {
   const r = await fetch(`${scannerUrl}/attestation`);
   if (!r.ok) throw new Error(`attestation: ${r.status}`);
   return await r.json();
