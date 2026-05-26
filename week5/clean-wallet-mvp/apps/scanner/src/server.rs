@@ -1,5 +1,5 @@
 use axum::{
-    extract::{DefaultBodyLimit, State},
+    extract::{rejection::JsonRejection, DefaultBodyLimit, State},
     http::StatusCode,
     response::{IntoResponse, Json, Response},
     routing::{get, post},
@@ -25,11 +25,11 @@ pub struct AppState {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ScreenInput {
     pub ufvk: String,
     pub policy: Policy,
-    #[serde(rename = "depositIntent")]
-    pub deposit_intent: DepositIntent,
+    #[serde(rename = "depositIntent")] pub deposit_intent: DepositIntent,
 }
 
 #[derive(Serialize)]
@@ -88,7 +88,15 @@ async fn attestation(State(s): State<AppState>) -> Response {
     }
 }
 
-async fn screen(State(s): State<AppState>, Json(input): Json<ScreenInput>) -> Response {
+async fn screen(
+    State(s): State<AppState>,
+    body: Result<Json<ScreenInput>, JsonRejection>,
+) -> Response {
+    let Json(input) = match body {
+        Ok(j) => j,
+        Err(_) => return err(StatusCode::BAD_REQUEST, "Policy or deposit intent is malformed."),
+    };
+
     let guard = match s.scan_lock.try_lock() {
         Ok(g) => g,
         Err(_) => {
@@ -334,5 +342,18 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp.status(), 400);
+    }
+
+    #[tokio::test]
+    async fn screen_rejects_malformed_json() {
+        let app = router(state_with_mocks());
+        let resp = app.oneshot(Request::builder()
+            .method("POST").uri("/screen")
+            .header("content-type", "application/json")
+            .body(Body::from("{this is not json}")).unwrap()).await.unwrap();
+        assert_eq!(resp.status(), 400);
+        let bytes = to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(v["error"], "Policy or deposit intent is malformed.");
     }
 }

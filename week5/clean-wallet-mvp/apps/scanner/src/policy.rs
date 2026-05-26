@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use crate::canonical::{canonicalize, sha256_hex};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Policy {
     #[serde(rename = "policyName")] pub policy_name: String,
     #[serde(rename = "policyVersion")] pub policy_version: u32,
@@ -16,6 +17,7 @@ pub struct Policy {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DepositIntent {
     #[serde(rename = "exchangeName")] pub exchange_name: String,
     #[serde(rename = "exchangeDepositAddress")] pub exchange_deposit_address: String,
