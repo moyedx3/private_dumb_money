@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DepositIntent",
+  "type": "object",
+  "required": ["exchangeName","exchangeDepositAddress","depositAmountZat","nonce","expiryUnix"],
+  "additionalProperties": false,
+  "properties": {
+    "exchangeName": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "exchangeDepositAddress": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "depositAmountZat": { "type": "string", "pattern": "^[0-9]+$" },
+    "nonce": { "type": "string", "pattern": "^0x[0-9a-f]{32,64}$" },
+    "expiryUnix": { "type": "integer", "minimum": 0 }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "result": "PASS",
+  "scanRange": {
+    "network": "testnet",
+    "startHeight": 2900000,
+    "endHeight": 2950000
+  },
+  "policyHash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "depositIntentHash": "0x4747474747474747474747474747474747474747474747474747474747474747",
+  "viewingScopeCommitment": "0xa0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0",
+  "recipientCount": 0,
+  "sanctionedHitCount": 0,
+  "scannerCodeMeasurement": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "scanCompletedAtUnix": 1716750000
+}
