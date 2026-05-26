@@ -9,6 +9,7 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow = "1"
+async-trait = "0.1"
 axum = "0.7"
 hex = "0.4"
 serde = { version = "1", features = ["derive"] }
