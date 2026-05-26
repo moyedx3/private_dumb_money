@@ -58,15 +58,24 @@ impl Attestor for DstackAttestor {
     }
 
     async fn info(&self) -> Result<Info> {
-        // POST /Info with empty body. Response includes "mrtd" hex string.
+        // POST /Info with empty body.
+        // Response shape: { "app_id": "...", "tcb_info": "{\"mrtd\":\"<hex>\", ...}", ... }
+        // `tcb_info` is a JSON-encoded STRING (not an object), so we parse it in two steps.
         let resp: serde_json::Value = post_uds_json(
             &self.socket_path,
             "/Info",
             &serde_json::json!({}),
         ).await?;
 
-        let mrtd = resp.get("mrtd").and_then(|v| v.as_str())
-            .ok_or_else(|| anyhow::anyhow!("dstack info: missing 'mrtd' field"))?;
+        // The dstack /Info endpoint returns `tcb_info` as a JSON-encoded STRING that
+        // contains the `mrtd` field. We parse the string into a nested Value, then
+        // pull `mrtd` out of it.
+        let tcb_info_str = resp.get("tcb_info").and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("dstack info: missing 'tcb_info' field"))?;
+        let tcb_info: serde_json::Value = serde_json::from_str(tcb_info_str)
+            .map_err(|e| anyhow::anyhow!("dstack info: tcb_info is not valid JSON: {e}"))?;
+        let mrtd = tcb_info.get("mrtd").and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow::anyhow!("dstack info: missing 'mrtd' inside tcb_info"))?;
 
         let normalized = if mrtd.starts_with("0x") {
             mrtd.to_lowercase()
@@ -175,5 +184,27 @@ pub mod tests {
         };
         let info = a.info().await.unwrap();
         assert_eq!(info.code_measurement, format!("0x{}", "c".repeat(96)));
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_simulator_info_returns_mrtd() {
+        let socket = "/home/kkang/.phala-cloud/simulator/0.5.3/dstack.sock";
+        let a = DstackAttestor::new(socket);
+        let info = a.info().await.expect("info() should succeed against simulator");
+        assert!(info.code_measurement.starts_with("0x"));
+        assert_eq!(info.code_measurement.len(), 98, "0x + 96 hex chars");
+        println!("simulator code measurement: {}", info.code_measurement);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_simulator_get_quote_returns_quote_hex() {
+        let socket = "/home/kkang/.phala-cloud/simulator/0.5.3/dstack.sock";
+        let a = DstackAttestor::new(socket);
+        let report_data = [0u8; 32];
+        let q = a.get_quote(&report_data).await.expect("get_quote() should succeed");
+        assert!(!q.quote_hex.is_empty(), "quote_hex should be non-empty");
+        println!("quote_hex prefix: {}", &q.quote_hex[..64]);
     }
 }
