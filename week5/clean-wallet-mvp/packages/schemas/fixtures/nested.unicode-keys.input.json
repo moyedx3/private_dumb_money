@@ -1,0 +1,10 @@
+{
+  "z": "last",
+  "a": "first",
+  "한": "korean",
+  "🌳": "emoji",
+  "nested": {
+    "b": 2,
+    "a": 1
+  }
+}

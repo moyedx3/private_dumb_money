@@ -1,0 +1,7 @@
+{
+  "exchangeName": "demo-exchange",
+  "exchangeDepositAddress": "ztestsapling1abcdef0123456789",
+  "depositAmountZat": "100000000",
+  "nonce": "0x6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f6f",
+  "expiryUnix": 1716800000
+}

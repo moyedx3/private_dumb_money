@@ -1,0 +1,29 @@
+services:
+  zebrad:
+    image: zfnd/zebra:1.7.0
+    environment:
+      # Tell the entrypoint script which network to use and which ports to bind.
+      # The entrypoint writes a minimal zebrad.toml from these env vars if none exists.
+      NETWORK: "Regtest"
+      RPC_LISTEN_ADDR: "0.0.0.0"
+      RPC_PORT: "18232"
+      ZEBRA_LISTEN_ADDR: "0.0.0.0"
+    volumes:
+      # Mount our full config to the path zebrad generates to, so the entrypoint
+      # sees it as already present and skips generation.
+      - ./tests/zebrad.toml:/etc/zebrad/zebrad.toml:ro
+    ports:
+      - "18233:18233"  # regtest p2p
+      - "18232:18232"  # regtest rpc
+  lightwalletd:
+    image: electriccoinco/lightwalletd:v0.4.18
+    depends_on: [zebrad]
+    command:
+      - "--zcash-conf-path=/etc/zcash/zcash.conf"
+      - "--log-file=/dev/stdout"
+      - "--no-tls-very-insecure"
+      - "--grpc-bind-addr=0.0.0.0:9067"
+    volumes:
+      - ./tests/zcash.conf:/etc/zcash/zcash.conf:ro
+    ports:
+      - "9067:9067"

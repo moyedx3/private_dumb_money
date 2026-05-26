@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Policy",
+  "type": "object",
+  "required": ["policyName","policyVersion","network","auditStartHeight","auditEndHeight","sanctionedAddressHashes","expectedScannerCodeMeasurement","createdAtUnix"],
+  "additionalProperties": false,
+  "properties": {
+    "policyName": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "policyVersion": { "type": "integer", "minimum": 1 },
+    "network": { "enum": ["testnet"] },
+    "auditStartHeight": { "type": "integer", "minimum": 0 },
+    "auditEndHeight": { "type": "integer", "minimum": 0 },
+    "sanctionedAddressHashes": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+      "maxItems": 1024
+    },
+    "expectedScannerCodeMeasurement": { "type": "string", "pattern": "^0x[0-9a-f]{96}$" },
+    "createdAtUnix": { "type": "integer", "minimum": 0 }
+  }
+}

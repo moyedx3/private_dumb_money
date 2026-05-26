@@ -1,0 +1,11 @@
+{
+  "description": "Curated demo sanctioned ZEC address set. NOT a real OFAC list. The first entry corresponds to a testnet address that demo-wallet-B has sent to.",
+  "version": 1,
+  "entries": [
+    {
+      "label": "Demo Sanctioned Address (testnet)",
+      "address": "ztestsapling1xxxFILL_IN_AFTER_FUNDING_SCRIPTxxx",
+      "hash": "0xFILL_IN_AFTER_FUNDING_SCRIPT"
+    }
+  ]
+}

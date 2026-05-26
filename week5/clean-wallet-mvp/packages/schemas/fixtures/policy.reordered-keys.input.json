@@ -1,0 +1,13 @@
+{
+  "createdAtUnix": 1716700000,
+  "policyName": "demo-v1",
+  "sanctionedAddressHashes": [
+    "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "0x1111111111111111111111111111111111111111111111111111111111111111"
+  ],
+  "expectedScannerCodeMeasurement": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "policyVersion": 1,
+  "auditEndHeight": 2950000,
+  "auditStartHeight": 2900000,
+  "network": "testnet"
+}
