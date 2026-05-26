@@ -1,3 +1,6 @@
+// This module uses node:crypto and MUST be imported only from server components,
+// server actions, route handlers, or other server-only TS files. Importing into
+// a "use client" component will break the browser bundle.
 import canonicalize from "canonicalize";
 import { createHash } from "node:crypto";
 
