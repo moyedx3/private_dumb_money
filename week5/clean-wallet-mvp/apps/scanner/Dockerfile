@@ -21,8 +21,11 @@ COPY apps/scanner/proto ./apps/scanner/proto
 RUN mkdir -p apps/scanner/src && \
     echo 'fn main() {}' > apps/scanner/src/main.rs && \
     cargo build --release -p clean-wallet-scanner && \
-    rm -rf apps/scanner/src apps/scanner/target/release/clean-wallet-scanner \
-           apps/scanner/target/release/deps/clean_wallet_scanner*
+    rm -rf apps/scanner/src \
+           target/release/clean-wallet-scanner \
+           target/release/deps/clean_wallet_scanner-* \
+           target/release/deps/libclean_wallet_scanner-* \
+           target/release/deps/clean_wallet_scanner.d
 
 COPY apps/scanner/src ./apps/scanner/src
 RUN cargo build --release -p clean-wallet-scanner --locked

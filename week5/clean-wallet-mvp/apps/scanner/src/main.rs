@@ -12,7 +12,7 @@ async fn main() -> anyhow::Result<()> {
 
     let primary = env::var("LIGHTWALLETD_PRIMARY")
         .unwrap_or_else(|_| "https://testnet.zec.rocks:443".into());
-    let backup = env::var("LIGHTWALLETD_BACKUP").ok();
+    let backup = env::var("LIGHTWALLETD_BACKUP").ok().filter(|s| !s.is_empty());
     let network = env::var("NETWORK").unwrap_or_else(|_| "testnet".into());
     let socket = env::var("DSTACK_SOCKET").unwrap_or_else(|_| "/var/run/dstack.sock".into());
 
