@@ -1,0 +1,10 @@
+{
+  "policyName": "demo-v1",
+  "policyVersion": 1,
+  "network": "testnet",
+  "auditStartHeight": 2900000,
+  "auditEndHeight": 2950000,
+  "sanctionedAddressHashes": ["0xFILL_IN_FROM_SANCTIONED_SET"],
+  "expectedScannerCodeMeasurement": "0xFILL_IN_AFTER_PHALA_DEPLOY",
+  "createdAtUnix": 1716700000
+}
