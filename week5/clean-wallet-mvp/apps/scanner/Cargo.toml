@@ -3,6 +3,10 @@ name = "clean-wallet-scanner"
 version = "0.1.0"
 edition.workspace = true
 
+[lib]
+name = "clean_wallet_scanner"
+path = "src/lib.rs"
+
 [dependencies]
 anyhow = "1"
 axum = "0.7"
