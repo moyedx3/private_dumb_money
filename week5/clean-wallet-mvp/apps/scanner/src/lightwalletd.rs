@@ -10,12 +10,18 @@ pub mod proto {
 }
 
 pub use proto::compact::compact_tx_streamer_client::CompactTxStreamerClient;
-pub use proto::compact::{BlockId, BlockRange, CompactBlock};
+pub use proto::compact::{BlockId, BlockRange, CompactBlock, RawTransaction, TxFilter};
 
 #[async_trait]
 pub trait LightwalletdClient: Send + Sync {
     async fn current_chain_tip(&self) -> Result<u64>;
     async fn fetch_block_range(&self, start: u64, end: u64) -> Result<Vec<CompactBlock>>;
+    /// Fetch the full serialized transaction bytes for the given txid.
+    ///
+    /// `txid` is the 32-byte little-endian transaction identifier as found in
+    /// `CompactTx::hash`.  Returns the raw transaction bytes suitable for
+    /// `zcash_primitives::transaction::Transaction::read`.
+    async fn fetch_transaction(&self, txid: &[u8; 32]) -> Result<Vec<u8>>;
 }
 
 pub struct GrpcClient {
@@ -95,6 +101,22 @@ impl LightwalletdClient for GrpcClient {
             Ok(blocks)
         }).await
     }
+
+    async fn fetch_transaction(&self, txid: &[u8; 32]) -> Result<Vec<u8>> {
+        let hash = txid.to_vec();
+        self.with_failover(|mut c| {
+            let hash = hash.clone();
+            async move {
+                let req = TxFilter {
+                    block: None,
+                    index: 0,
+                    hash,
+                };
+                let resp = c.get_transaction(req).await?;
+                Ok(resp.into_inner().data)
+            }
+        }).await
+    }
 }
 
 #[cfg(test)]
@@ -104,6 +126,15 @@ pub mod tests {
     pub struct MockClient {
         pub tip: u64,
         pub blocks: Vec<CompactBlock>,
+        /// Pre-canned raw transaction bytes keyed by txid (32-byte array).
+        /// If a txid is not found, `fetch_transaction` returns an empty vec.
+        pub raw_txs: Vec<([u8; 32], Vec<u8>)>,
+    }
+
+    impl MockClient {
+        pub fn new(tip: u64, blocks: Vec<CompactBlock>) -> Self {
+            Self { tip, blocks, raw_txs: vec![] }
+        }
     }
 
     #[async_trait]
@@ -115,18 +146,24 @@ pub mod tests {
                 .cloned()
                 .collect())
         }
+        async fn fetch_transaction(&self, txid: &[u8; 32]) -> Result<Vec<u8>> {
+            for (id, bytes) in &self.raw_txs {
+                if id == txid {
+                    return Ok(bytes.clone());
+                }
+            }
+            // Return empty vec — caller treats empty as "no shielded outputs"
+            Ok(vec![])
+        }
     }
 
     #[tokio::test]
     async fn mock_returns_filtered_blocks() {
-        let mock = MockClient {
-            tip: 100,
-            blocks: vec![
-                CompactBlock { height: 10, ..Default::default() },
-                CompactBlock { height: 20, ..Default::default() },
-                CompactBlock { height: 30, ..Default::default() },
-            ],
-        };
+        let mock = MockClient::new(100, vec![
+            CompactBlock { height: 10, ..Default::default() },
+            CompactBlock { height: 20, ..Default::default() },
+            CompactBlock { height: 30, ..Default::default() },
+        ]);
         let got = mock.fetch_block_range(15, 25).await.unwrap();
         assert_eq!(got.len(), 1);
         assert_eq!(got[0].height, 20);

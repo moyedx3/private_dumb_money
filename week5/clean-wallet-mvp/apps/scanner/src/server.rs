@@ -196,6 +196,7 @@ mod tests {
             client: Arc::new(MockClient {
                 tip: 1_000_000,
                 blocks: vec![],
+                raw_txs: vec![],
             }),
             attestor: Arc::new(MockAttestor {
                 code_measurement: format!("0x{}", "b".repeat(96)),
