@@ -2,9 +2,9 @@
   "policyName": "demo-v1",
   "policyVersion": 1,
   "network": "testnet",
-  "auditStartHeight": 2900000,
-  "auditEndHeight": 2950000,
-  "sanctionedAddressHashes": ["0xFILL_IN_FROM_SANCTIONED_SET"],
-  "expectedScannerCodeMeasurement": "0xFILL_IN_AFTER_PHALA_DEPLOY",
+  "auditStartHeight": 3340000,
+  "auditEndHeight": 3340010,
+  "sanctionedAddressHashes": [],
+  "expectedScannerCodeMeasurement": "0xc68518a0ebb42136c12b2275164f8c72f25fa9a34392228687ed6e9caeb9c0f1dbd895e9cf475121c029dc47e70e91fd",
   "createdAtUnix": 1716700000
 }
