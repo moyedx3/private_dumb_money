@@ -1,0 +1,21 @@
+{
+  "network": "regtest",
+  "pool": "orchard",
+  "outputs": [
+    {
+      "height": 100,
+      "viewing_scope_id": "alice-orchard-account-0",
+      "commitment": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    {
+      "height": 101,
+      "viewing_scope_id": "alice-orchard-account-0",
+      "commitment": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    {
+      "height": 102,
+      "viewing_scope_id": "bob-orchard-account-0",
+      "commitment": "1111111111111111111111111111111111111111111111111111111111111111"
+    }
+  ]
+}
