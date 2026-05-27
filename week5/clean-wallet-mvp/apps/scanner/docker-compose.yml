@@ -5,9 +5,9 @@ services:
     ports:
       - "8080:8080"
     environment:
-      LIGHTWALLETD_PRIMARY: "https://testnet.zec.rocks:443"
+      LIGHTWALLETD_PRIMARY: "https://zec.rocks:443"
       LIGHTWALLETD_BACKUP: ""
-      NETWORK: "testnet"
+      NETWORK: "mainnet"
       MAX_RANGE_BLOCKS: "100000"
       DSTACK_SOCKET: "/var/run/dstack.sock"
       RUST_LOG: "info,clean_wallet_scanner=debug"

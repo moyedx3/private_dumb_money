@@ -1,7 +1,9 @@
 # Demo data
 
-Reproducible inputs for the clean-wallet MVP demo. **Testnet only.** None of these
-addresses or UFVKs correspond to mainnet funds.
+Reproducible inputs for the clean-wallet MVP demo. **Mainnet.** Demo funds are
+intentionally tiny (sub-cent). The "sanctioned" address is fabricated (generated
+by `apps/scanner/src/bin/gen-taddr.rs`) — it does not correspond to any real
+OFAC listing.
 
 ## Files
 

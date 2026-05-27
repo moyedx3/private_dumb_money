@@ -27,8 +27,8 @@ Phala account and cannot be automated.
 export TAG=$(git rev-parse --short HEAD)
 export APP_NAME=clean-wallet-scanner
 
-# Primary lightwalletd endpoint (testnet)
-export LIGHTWALLETD_URL=testnet.zec.rocks:443
+# Primary lightwalletd endpoint (mainnet)
+export LIGHTWALLETD_URL=zec.rocks:443
 
 # Backup endpoint — supply if you have a second node; leave blank to skip
 export LIGHTWALLETD_BACKUP=
@@ -132,17 +132,17 @@ Create a one-off binary at `apps/scanner/src/bin/gen-ufvk.rs`:
 //! Minimal UFVK generator — run with:
 //!   cargo run -p clean-wallet-scanner --bin gen-ufvk -- <hex-seed>
 use zcash_keys::keys::UnifiedSpendingKey;
-use zcash_protocol::consensus::TestNetwork;
+use zcash_protocol::consensus::MainNetwork;
 use zip32::AccountId;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let seed_hex = args.get(1).expect("usage: gen-ufvk <hex-seed>");
     let seed = hex::decode(seed_hex).expect("hex seed");
-    let usk = UnifiedSpendingKey::from_seed(&TestNetwork, &seed, AccountId::ZERO)
+    let usk = UnifiedSpendingKey::from_seed(&MainNetwork, &seed, AccountId::ZERO)
         .expect("USK from seed");
     let ufvk = usk.to_unified_full_viewing_key();
-    let encoded = ufvk.encode(&TestNetwork);
+    let encoded = ufvk.encode(&MainNetwork);
     println!("{}", encoded);
 }
 ```

@@ -1,10 +1,10 @@
 {
   "policyName": "demo-v1",
   "policyVersion": 1,
-  "network": "testnet",
-  "auditStartHeight": 3340000,
-  "auditEndHeight": 3340010,
-  "sanctionedAddressHashes": [],
-  "expectedScannerCodeMeasurement": "0xc68518a0ebb42136c12b2275164f8c72f25fa9a34392228687ed6e9caeb9c0f1dbd895e9cf475121c029dc47e70e91fd",
+  "network": "mainnet",
+  "auditStartHeight": 2700000,
+  "auditEndHeight": 2700020,
+  "sanctionedAddressHashes": ["0x5789cca3a3cc4906ff4b9061d95a3218f52daabf758bdb5b683f62b6b3c431a9"],
+  "expectedScannerCodeMeasurement": "0xFILL_IN_AFTER_PHALA_DEPLOY",
   "createdAtUnix": 1716700000
 }

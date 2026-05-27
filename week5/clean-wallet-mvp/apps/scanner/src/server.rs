@@ -135,7 +135,7 @@ async fn screen(
         Err(ScanError::NetworkMismatch { .. }) => {
             return err(
                 StatusCode::BAD_REQUEST,
-                "Scanner is configured for testnet only.",
+                "Scanner network does not match the policy network.",
             )
         }
         Err(ScanError::RangeTooLarge { .. }) => {

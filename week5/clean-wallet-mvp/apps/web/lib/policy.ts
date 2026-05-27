@@ -4,7 +4,7 @@ import { canonicalJson, sha256Hex } from "./canonical";
 export type Policy = {
   policyName: string;
   policyVersion: number;
-  network: "testnet";
+  network: "testnet" | "mainnet";
   auditStartHeight: number;
   auditEndHeight: number;
   sanctionedAddressHashes: string[];
@@ -20,7 +20,7 @@ export type DepositIntent = {
   expiryUnix: number;
 };
 
-export type ScanRange = { network: "testnet"; startHeight: number; endHeight: number };
+export type ScanRange = { network: "testnet" | "mainnet"; startHeight: number; endHeight: number };
 
 export type ScreeningArtifact = {
   schemaVersion: 1;
