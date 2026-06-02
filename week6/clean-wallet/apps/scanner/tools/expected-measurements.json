@@ -1,0 +1,10 @@
+{
+  "_README": "RA-TLS measurement 핀 게시값. submit-ufvk 가 RA-TLS 검증 시 기본으로 이 MRTD/RTMR3 에 대조한다(값 없으면 skip). 끄기: --no-measurement-pin. override: --expected-mrtd/--expected-rtmr3.",
+  "trust": "tofu-snapshot",
+  "warning": "이 값은 라이브 엔드포인트에서 읽은 TOFU 스냅샷이다 — 소스코드/재현빌드에서 유도한 값이 아니다. '지금 enclave 가 정직한 코드'를 보증하지 않고 '이 배포가 나중에 바뀌면 감지'만 한다.",
+  "source": "live https://8a7763ac129cce9f021cc78db11a275d9dfaa2fd-8080s.dstack-pha-prod9.phala.network @ 2026-06-02 (NOT source-derived)",
+  "appId": "8a7763ac129cce9f021cc78db11a275d9dfaa2fd",
+  "mrtd": "f06dfda6dce1cf904d4e2bab1dc370634cf95cefa2ceb2de2eee127c9382698090d7a4a13e14c536ec6c9c3c8fa87077",
+  "rtmr3": "d898d275a847b6a46da0b080df6172fa3a7367f021aa6d8bc876238324a84037dae0df73694f53b7fd348571af4feb13",
+  "howToUpgrade": "진짜 단계2(소스유도): dstack-mr 로 (a) dstack OS 이미지→MRTD, (b) docker 이미지를 digest 로 고정한 app-compose→RTMR3 를 라이브 없이 계산해 이 값을 교체하고 trust 를 'source-derived' 로 바꾼다. 개념: docs/demo-architecture-limitations.md 단계 2."
+}

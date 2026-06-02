@@ -1,0 +1,15 @@
+{
+  "name": "@clean-wallet/scanner",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.ts\" \"tools/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@clean-wallet/core": "*",
+    "@phala/dstack-sdk": "^0.5.7"
+  }
+}

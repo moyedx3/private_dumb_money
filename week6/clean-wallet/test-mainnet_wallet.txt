@@ -1,0 +1,83 @@
+.\target\release\gen-testnet-wallet.exe --network main
+# Zcash mainnet wallet
+# (이 파일을 안전한 곳에 보관 — mnemonic 이 진짜 비밀)
+# ⚠️  MAINNET — 진짜 자금. mnemonic 노출 = 자금 손실. 화면 캡처/공유 금지.
+
+network: mainnet
+account: 0
+
+mnemonic (BIP-39, 영어): sort project liberty patrol spoil topic struggle toss odor keen budget turn answer weird assault interest maze vibrant ivory few math shy multiply business
+seed_hex: c7eb93d369018eb16965cc2aa985033fa414b3ce40011f8102e90525fc0549c96ccc424803e6059be9a3440db57171df9db6e2811ea58005729b1a5d4a673ae6
+
+ufvk: uview1cwywql9m9nzcqsx7skx32rk90rrwu92p07c7ur7z9y5zctykv2r5xeudv2j2dvdsd8z6rrmjw0pqrym63hrgfm72lddp89ffqkkdcafyvlj9h04hwu9w6k3uetx5hm6342tareqgsk9xyvtt9m86x2tz2vj22za7rehrptt9yr54j2tfetyp7e6jlr63nnpmjhc4aej395e4ye2zw6mg2qx46qy7cdreseeergt5ha07eh94curng4cvdhfhhqwutprha7a4k5y8hsvjl209700a4d5m2m0m4rgj63jhkn8v02fqrd9fvuwwdzn2rahs6ytatlqc2lk62v8f3g52r608m9rzjyv6sw39zy5el9935ae9nls4k2ck234j4guas86kqm69kvs5xv3mrqwa8dq3k0025nh76dghjt5mmnwhsgqf4zcdlsnjzfrpnh0gzmrtcuv2h5enezxp9kufr8nhm2rax4dyzzxpud8v5c5n4mqqxyhxf86n
+  → 최신 형식 (ZIP-316), sapling+orchard+transparent 통합. 우리 scanner 에 이걸 사용.
+
+sapling_extended_fvk: zxviews1qwsgw7tqqqqqpqp7lq3v69unqwjyzgjsr9qncq8zysrvh8dm6d6w8knv3c3w7wkvvkmjw443a4zm9qvwaneh9xcy9ja4sqfwmyv9z9fzzwx02h05v6ayvk0qnckfvl2t4evgjdu3epnxdvt9w23r5hcfxjw8nee8c922gdxnmwtkvlcau747a8h25wg8fy8729nrf66z8zey8kcs8hrfe8c5655dcy0wazsga94lpayc3f8vjufs775lpd86sx8qnsk0xpv9x99v7vgxpg725
+  → 구식 sapling-only EFVK. testnet.zcashexplorer.app/vk 같은 구식 도구가 UFVK 안 받으면 이걸 넣기.
+  → 단, sapling 노트만 볼 수 있음 (orchard/transparent 못 봄).
+
+transparent_address_index_0 (BIP-44 standalone, m/44'/133'/0'/0/0): t1VJaweBaBTvHLuK9sTtbssVwujAmjy2d6R
+  → 옛 wallet 의 standalone t-addr. Zashi/Vizor 가 보여주는 t-addr 와 *다를 수 있다* (그건 UA 안의 receiver).
+
+ua_transparent_receiver (UA diversifier-bound, Vizor 호환): t1VJaweBaBTvHLuK9sTtbssVwujAmjy2d6R
+  → Vizor 의 'Transparent receive' 화면이 보여주는 t-addr 와 *이게* 일치해야 한다.
+  → 내부적으로 diversifier_index=0 → BIP-44 m/44'/133'/0'/0/0 에서 derive.
+
+unified_address_allow_all: u1lx74l47vh5f9r7lu2ljgpkmuayxx8endatgl0azpmsf765lnhqk4e22rhd2jtl7rsea3cwmaplu35egc9322pqcuea4xaz6nzkly7pt72avm0wa49p8hugezywedkg4p0xgfkh6wmwc
+  → orchard+sapling+transparent 모두 포함된 UA.
+
+unified_address_vizor_compat: u1qash3s8d2w557f0ajwjpuas3wgumhhlqft40mrqag8kqs9efaw3fxh2judxy7ev3eux0gqngepc26nrlupml8u9k42s325uwx7ztxkqencglmuvqyny6vffhhppzpp99jzmjr2g85vhk7ad7dv02jc0uql4t6a708muwjke6fg5m296d
+  → Vizor 가 기본으로 보여주는 형태 (orchard+sapling, transparent 제외). Vizor 의 'Receive' 화면 utest1... 과 같아야 한다.
+
+unified_address_orchard_only: u1nmad70rpzcsppnhx6vutrwk9n2u0tgmlxrqguy8cl3l6fwlsr4kp9ftkcl80zav46ye940eeqfr5myu5346fjlweeu65k4gsyy0gl8e2
+  → Orchard receiver 만 들어 있는 UA. 송금자가 자동으로 Orchard pool 로 보내게 됨.
+    Orchard 만 지원하는 환경에서도 받을 수 있음. shielded pool 명시 강제용.
+
+검증 (같은 mnemonic 으로 import 한 다른 지갑이 *다른 주소* 를 보여줘도 같은 지갑일 수 있다 — receiver 정책 차이):
+  - 두 UA(allow_all vs vizor_compat) 는 같은 UFVK 에서 derive — 둘 다 우리 지갑의 유효한 주소.
+  - Vizor 의 transparent 받기 주소는 ua_transparent_receiver 와 매칭돼야 한다 (standalone index_0 이 아님).
+  - 또는 외부 지갑의 export UFVK 가 위 ufvk 와 같은지.
+
+다음 단계 (e2e 테스트):
+  1. 위 mnemonic 을 Vizor (mainnet 기본 빌드) 에 import
+  2. 자기 mainnet 자금이 보이는지 확인 (Vizor sync 후)
+  3. Vizor 에서 임의의 다른 mainnet 주소로 작게 송금 (outgoing)
+  4. submit-ufvk 도구로 ufvk + block range 를 scanner 에 보내 검증
+     (--network main + 적절한 mainnet lightwalletd URL)
+
+
+     PS D:\zcash_auditor\clean-wallet\apps\zcash-scanner-rs>   
+     .\apps\zcash-scanner-rs\target\release\scan-incoming.exe `
+       --lwd-url https://zec.rocks:443 `
+       --network main `
+       --start 3356040 --end 3356048 `
+       --ufvk uview1cwywql9m9nzcqsx7skx32rk90rrwu92p07c7ur7z9y5zctykv2r5xeudv2j2dvdsd8z6rrmjw0pqrym63hrgfm72lddp89ffqkkdcafyvlj9h04hwu9w6k3uetx5hm6342tareqgsk9xyvtt9m86x2tz2vj22za7rehrptt9yr54j2tfetyp7e6jlr63nnpmjhc4aej395e4ye2zw6mg2qx46qy7cdreseeergt5ha07eh94curng4cvdhfhhqwutprha7a4k5y8hsvjl209700a4d5m2m0m4rgj63jhkn8v02fqrd9fvuwwdzn2rahs6ytatlqc2lk62v8f3g52r608m9rzjyv6sw39zy5el9935ae9nls4k2ck234j4guas86kqm69kvs5xv3mrqwa8dq3k0025nh76dghjt5mmnwhsgqf4zcdlsnjzfrpnh0gzmrtcuv2h5enezxp9kufr8nhm2rax4dyzzxpud8v5c5n4mqqxyhxf86n
+
+
+  단계 1: outgoing 송금 만들기
+
+  Vizor 에서 작은 amount (예: 0.0001 ZEC) 를 임의의 다른 mainnet 주소 로 보내기. 송금 후:
+  - 송금 block height H 메모
+  - 수취인 주소 메모 (Vizor 의 send history 에서 그대로 복사)
+
+  단계 2: FAIL 데모 — 자기 송금 수취인을 sanctioned 로
+
+  node apps/scanner/tools/submit-ufvk.ts `
+      --host http://localhost:8080 `
+      --network mainnet `
+      --lwd-url https://zec.rocks:443 `
+      --start 3356070 --end 3356082 `
+      --no-verify --ufvk $ufvk `
+      --sanctioned "u1sdlytlzfzzp048p4eye4nh5kuv5l9s7enfcdv3dy9krsvcpr5ju8fqw5z05hmcslzdf6uecx7q2frmnd99duglvvxpm3sp473ydkq6lr6mgarhtf32haczgpzvammgaxzvx6cn98yak6z06d4s9ps4phxrqkweqezrdyr3qfgyy66aun"
+
+  기대 결과: "result": "FAIL" + derivedRecords 에 매치된 record.
+
+  단계 3: PASS 데모 — 무관한 주소를 sanctioned 로
+
+  node apps/scanner/tools/submit-ufvk.ts `
+      --host http://localhost:8080 `
+      --network mainnet `
+      --lwd-url https://zec.rocks:443 `
+      --start (H - 5) --end (H + 5) `
+      --no-verify --ufvk $ufvk `
+      --sanctioned "t1FakeSanctioned111111111111111111111,u1NotInMyWallet"

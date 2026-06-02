@@ -1,0 +1,17 @@
+# Phala dstack 배포용 — Phase 4 배포 준비물.
+# 실제 배포는 docs/deploy-phala.md 참고 (Phala Cloud 계정·CLI 필요).
+#
+# 로컬 확인:  docker compose up --build
+# dstack 배포: 이 compose 파일을 Phala Cloud / dstack에 올린다.
+services:
+  scanner:
+    build:
+      context: .
+      dockerfile: apps/scanner/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      # 디버그: artifact 응답에 _debug.derivedRecords (raw 주소 목록) 노출.
+      # ⚠️ 실 배포에서는 꼭 끄기 — raw 거래내역이 응답에 들어가 enclave 경계 위반.
+      - DEBUG_DERIVED=true

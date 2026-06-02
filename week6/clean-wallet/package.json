@@ -1,0 +1,27 @@
+{
+  "name": "clean-wallet",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Zcash Private Off-Ramp Screening — attested scanner MVP",
+  "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/web",
+    "apps/scanner"
+  ],
+  "scripts": {
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "demo:scan": "node packages/core/src/cli/scan.ts",
+    "demo:verify": "node packages/core/src/cli/verify.ts",
+    "demo": "npm run demo:scan && npm run demo:verify",
+    "dev": "npm run dev --workspace @clean-wallet/web"
+  },
+  "devDependencies": {
+    "@types/node": "^25.9.1",
+    "typescript": "^5.7.0"
+  }
+}
