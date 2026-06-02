@@ -1,0 +1,19 @@
+services:
+  clean-wallet:
+    # Replace with the immutable digest of the image you build from Dockerfile.
+    # Phala Cloud pulls registry images from Docker Compose; do not rely on a
+    # local `build:` context for production CVM deployment.
+    image: docker.io/nogie/clean-wallet-mvp2@sha256:f86f20b3ad46480fa52fe2ca8d24eb1ed48fd7d3a1e10c6f602e00d39b48bc4e
+    ports:
+      - "8080:8080"
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+    environment:
+      - CLEAN_WALLET_ATTESTOR=phala
+      - CLEAN_WALLET_PORT=8080
+      # Generate an in-memory enclave X25519 key on process start. The private
+      # key is never written to compose/env; /attestation exposes only the
+      # public key bound into reportData. Envelopes expire on CVM restart.
+      - CLEAN_WALLET_AUTO_GENERATE_ENCLAVE_KEY=1
+      - CLEAN_WALLET_ENCLAVE_KEY_ID=phala-runtime-ephemeral-x25519-v1
+      - CLEAN_WALLET_ENCLAVE_KEY_SCHEME=x25519-chacha20poly1305-v0

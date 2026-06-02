@@ -6,7 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from .crypto import canonical_json, constant_time_equal, hmac_sha256_hex, normalize_commitment, root_for_commitments, sha256_hex
+from .crypto import (
+    canonical_json,
+    constant_time_equal,
+    hmac_sha256_hex,
+    normalize_commitment,
+    root_for_commitments,
+    sha256_hex,
+)
 
 
 @dataclass(frozen=True)

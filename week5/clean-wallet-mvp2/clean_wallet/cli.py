@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .attestation import MockAttestor, package_measurement
+from .attestation import build_attestor, build_verifier, package_measurement
 from .blacklist import build_manifest, load_manifest
 from .proof import ProofRequest, create_report, verify_report
 from .scanner import BlockRange, FixtureScanner
@@ -33,7 +33,11 @@ def cmd_measurement(_: argparse.Namespace) -> int:
 
 
 def cmd_build_blacklist(args: argparse.Namespace) -> int:
-    commitments = [line.strip() for line in Path(args.commitments).read_text(encoding="utf-8").splitlines() if line.strip() and not line.strip().startswith("#")]
+    commitments = [
+        line.strip()
+        for line in Path(args.commitments).read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
     manifest = build_manifest(
         commitments,
         network=args.network,
@@ -57,7 +61,7 @@ def cmd_request_proof(args: argparse.Namespace) -> int:
         block_range=BlockRange(args.start_block, args.end_block),
         viewing_scope_id=args.viewing_scope_id,
     )
-    attestor = MockAttestor(args.attestation_key)
+    attestor = build_attestor(args.attestor, attestation_key=args.attestation_key)
     report = create_report(
         request=request,
         scanner=FixtureScanner(fixture),
@@ -75,8 +79,16 @@ def cmd_request_proof(args: argparse.Namespace) -> int:
 def cmd_verify_report(args: argparse.Namespace) -> int:
     manifest = load_manifest(read_json(args.blacklist))
     report = read_json(args.report)
-    measurement = args.measurement or package_measurement()
-    attestor = MockAttestor(args.attestation_key, measurement=str(report.get("signature_or_quote", {}).get("measurement", measurement)))
+    quote = dict(report.get("signature_or_quote", {}))
+    attestor_kind = args.attestor or str(quote.get("mode", "mock-tee-v0"))
+    measurement = args.measurement or str(
+        report.get("measurement") or quote.get("measurement") or package_measurement()
+    )
+    attestor = build_verifier(
+        attestor_kind,
+        attestation_key=args.attestation_key,
+        measurement=str(quote.get("measurement", measurement)),
+    )
     verify_report(
         report=report,
         manifest=manifest,
@@ -87,7 +99,10 @@ def cmd_verify_report(args: argparse.Namespace) -> int:
     )
     print("report verification: PASS")
     print(f"result: {report['result']}")
-    print(f"scope: {report['network']} {report['pool']} blocks {report['block_range']['start']}..{report['block_range']['end']}")
+    print(
+        f"scope: {report['network']} {report['pool']} "
+        f"blocks {report['block_range']['start']}..{report['block_range']['end']}"
+    )
     print("note: PASS is bounded to submitted scope/range/list; it is not a global innocence proof.")
     return 0
 
@@ -120,6 +135,12 @@ def build_parser() -> argparse.ArgumentParser:
     proof.add_argument("--end-block", type=int, required=True)
     proof.add_argument("--blacklist-key", default=DEFAULT_BLACKLIST_KEY)
     proof.add_argument("--attestation-key", default=DEFAULT_ATTESTATION_KEY)
+    proof.add_argument(
+        "--attestor",
+        default="mock",
+        choices=["mock", "phala"],
+        help="attestation backend: mock for local demo, phala inside Phala/dstack CVM",
+    )
     proof.set_defaults(func=cmd_request_proof)
 
     verify = sub.add_parser("verify-report", help="verify report integrity, blacklist binding, and mock quote")
@@ -129,6 +150,11 @@ def build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--max-age-seconds", type=int)
     verify.add_argument("--blacklist-key", default=DEFAULT_BLACKLIST_KEY)
     verify.add_argument("--attestation-key", default=DEFAULT_ATTESTATION_KEY)
+    verify.add_argument(
+        "--attestor",
+        choices=["mock", "phala"],
+        help="override verifier backend; defaults to report quote mode",
+    )
     verify.set_defaults(func=cmd_verify_report)
     return parser
 
