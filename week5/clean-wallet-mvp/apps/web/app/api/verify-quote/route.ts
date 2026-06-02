@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
 // Endpoint of the dstack-verifier service. In production this is either:
-//   - Phala Trust Center: https://proof.t16z.com/api/v1/verify
+//   - Phala Trust Center (t16z): https://proof.t16z.com/api/upload
 //   - A self-hosted dstack-verifier binary
-// For MVP, we proxy to the public Trust Center.
-const VERIFIER_URL = process.env.DSTACK_VERIFIER_URL ?? "https://proof.t16z.com/api/v1/verify";
+// The t16z upload API takes the quote as a multipart form field (`hex` = quote
+// hex without a 0x prefix, or `file` = raw quote bytes) and returns
+// { id, success, proof_of_cloud, quote }. `success` is the verification verdict.
+// (The legacy /api/v1/verify JSON path no longer exists — it 404s.)
+const VERIFIER_URL = process.env.DSTACK_VERIFIER_URL ?? "https://proof.t16z.com/api/upload";
 
 /**
  * Parse mr_td and report_data directly from the TDX quote hex bytes.
@@ -38,15 +41,19 @@ export async function POST(req: NextRequest) {
   let upstreamOk = false;
   let upstreamError: string | undefined;
   try {
-    const upstream = await fetch(VERIFIER_URL, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(quote),
-    });
+    // t16z /api/upload expects multipart form-data with `hex` = quote hex (no 0x prefix).
+    const cleanHex = quoteHex.startsWith("0x") ? quoteHex.slice(2) : quoteHex;
+    const form = new FormData();
+    form.append("hex", cleanHex);
+    const upstream = await fetch(VERIFIER_URL, { method: "POST", body: form });
     const body = await upstream.json().catch(() => ({} as Record<string, unknown>));
-    upstreamOk = !!(body as { verified?: boolean; ok?: boolean }).verified
-      || !!(body as { ok?: boolean }).ok;
-    upstreamError = (body as { error?: string }).error;
+    // `success` is the t16z verification verdict; `proof_of_cloud` confirms a genuine
+    // cloud TEE. A self-hosted dstack-verifier may instead return { verified } / { ok }.
+    const b = body as {
+      success?: boolean; proof_of_cloud?: boolean; verified?: boolean; ok?: boolean; error?: string;
+    };
+    upstreamOk = !!(b.success ?? b.verified ?? b.ok);
+    upstreamError = b.error ?? (upstream.ok ? undefined : `verifier HTTP ${upstream.status}`);
   } catch (e) {
     upstreamError = `verifier unreachable: ${String(e)}`;
   }
