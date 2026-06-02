@@ -1,0 +1,26 @@
+# Phala dstack 배포 전용 compose — 실제 TDX attestation을 쓴다.
+#
+# 로컬 테스트는 docker-compose.yml(시뮬레이션 attestation)을 쓰고,
+# 이 파일은 Phala Cloud / dstack 배포에만 쓴다. (docs/deploy-phala.md)
+#
+# docker-compose.yml과 차이:
+# - ATTESTATION_MODE=phala     → 스캐너가 PhalaAttestation을 쓴다
+# - SCANNER_TRANSPORT=http     → 앱은 평문 HTTP 서빙, TLS는 dstack Gateway가 종단한다
+#   (Phala Cloud의 기본 Gateway는 Let's Encrypt cert로 TLS를 종단하고 컨테이너엔 HTTP를
+#    포워딩한다. 앱이 RA-TLS HTTPS를 직접 서빙하면 프로토콜이 안 맞아 빈 응답이 난다.
+#    attestation quote는 HTTP 모드에서도 dstack getQuote로 artifact 본문에 그대로 들어간다.
+#    RA-TLS를 클라이언트까지 end-to-end로 유지하려면 dstack-ingress(passthrough) 사용.)
+# - /var/run/dstack.sock 마운트 → dstack SDK가 TDX quote를 요청할 소켓
+services:
+  scanner:
+    # Phala는 이미지를 레지스트리에서 pull한다 — build가 아니라 image를 쓴다.
+    # 아래를 본인이 docker push 한 DockerHub 이미지로 바꿀 것 (docs/deploy-phala.md §3).
+    image: ewwgh/zcash-screnning-scanner:latest
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - ATTESTATION_MODE=phala
+      - SCANNER_TRANSPORT=ratls
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
