@@ -2,7 +2,7 @@
 # Build context expected: repo root of clean-wallet-mvp (week5/clean-wallet-mvp/).
 # Build invocation:  docker build -f apps/scanner/Dockerfile -t clean-wallet-scanner .
 
-FROM rust:1.85-bookworm AS builder
+FROM rust:1.88-bookworm AS builder
 WORKDIR /build
 
 # Install protoc — required by tonic-build at compile time.
@@ -18,8 +18,11 @@ COPY apps/scanner/build.rs ./apps/scanner/build.rs
 COPY apps/scanner/proto ./apps/scanner/proto
 
 # Pre-fetch dependencies for a layer cache hit when only source changes.
+# The crate declares an explicit [lib] target (src/lib.rs) alongside the binary,
+# so the prefetch stub must provide both or `cargo build` fails to read lib.rs.
 RUN mkdir -p apps/scanner/src && \
     echo 'fn main() {}' > apps/scanner/src/main.rs && \
+    echo '// prefetch stub' > apps/scanner/src/lib.rs && \
     cargo build --release -p clean-wallet-scanner && \
     rm -rf apps/scanner/src \
            target/release/clean-wallet-scanner \

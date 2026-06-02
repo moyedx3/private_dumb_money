@@ -5,6 +5,6 @@
   "auditStartHeight": 2700000,
   "auditEndHeight": 2700020,
   "sanctionedAddressHashes": ["0x5789cca3a3cc4906ff4b9061d95a3218f52daabf758bdb5b683f62b6b3c431a9"],
-  "expectedScannerCodeMeasurement": "0xFILL_IN_AFTER_PHALA_DEPLOY",
+  "expectedScannerCodeMeasurement": "0xf06dfda6dce1cf904d4e2bab1dc370634cf95cefa2ceb2de2eee127c9382698090d7a4a13e14c536ec6c9c3c8fa87077",
   "createdAtUnix": 1716700000
 }
