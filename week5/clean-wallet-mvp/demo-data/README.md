@@ -1,9 +1,17 @@
 # Demo data
 
 Reproducible inputs for the clean-wallet MVP demo. **Mainnet.** Demo funds are
-intentionally tiny (sub-cent). The "sanctioned" address is fabricated (generated
-by `apps/scanner/src/bin/gen-taddr.rs`) — it does not correspond to any real
-OFAC listing.
+intentionally tiny (sub-cent). The "sanctioned" address is fabricated (a fresh
+mainnet **shielded unified address** minted by `apps/scanner/src/bin/gen-watchlist.rs`)
+— it does not correspond to any real OFAC listing.
+
+> **Why shielded, not transparent?** The scanner only recovers Sapling/Orchard
+> outputs via OVK trial decryption (`scan.rs::extract_outgoing_recipients`). A
+> transparent `t1…` recipient is invisible to it, so a payment there would
+> wrongly return PASS. The earlier `gen-taddr.rs` (transparent) address was the
+> wrong tool for this; `gen-watchlist.rs` mints a shielded unified address and
+> prints the exact `sha256` the scanner computes for the matching pool. Zashi is
+> Orchard-first, so the Orchard-receiver hash is the one that triggers the hit.
 
 ## Files
 
