@@ -15,8 +15,14 @@ mainnet **shielded unified address** minted by `apps/scanner/src/bin/gen-watchli
 
 ## Files
 
-- `ufvk-clean.txt` — Wallet A UFVK. No outgoing tx to a sanctioned address. (Populated during Task 15.)
-- `ufvk-dirty.txt` — Wallet B UFVK. Sent one shielded tx to the address in `sanctioned-set.json[0]`. (Populated during Task 15.)
+- `ufvk-clean.txt` — Wallet A UFVK (mainnet). No outgoing tx to a sanctioned address → PASS.
+- `ufvk-dirty.txt` — Wallet B UFVK (mainnet). Restore its mnemonic into Zashi, fund sub-cent, send one shielded tx to `sanctioned-set.json[0].address` → FAIL.
+
+Both wallets are minted by `apps/scanner/src/bin/gen-dirty-wallet.rs`, which prints a
+BIP39 mnemonic + the matching mainnet UFVK derived the same way Zashi does (BIP39
+seed, empty passphrase, account 0) — so you can restore the mnemonic into a fresh
+Zashi wallet and the scanner will recognise its outgoing payments. **Throwaway
+only:** the default entropy is public; never hold more than sub-cent funds.
 - `sanctioned-set.json` — Curated demo sanctioned address set (NOT real OFAC data).
 - `policy.demo.json` — Policy bound to the demo block range + sanctioned set + Phala code measurement.
 - `wallet-meta.json` — Block heights and other provisioning metadata. (Populated during Task 15.)

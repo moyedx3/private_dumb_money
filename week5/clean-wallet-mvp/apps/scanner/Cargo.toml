@@ -33,6 +33,7 @@ zcash_keys = { version = "0.13", default-features = false, features = ["sapling"
 zcash_primitives = "0.27"
 zcash_protocol = "0.8"
 zcash_transparent = "0.7"
+bip0039 = "0.12"
 
 [build-dependencies]
 tonic-build = "0.11"
