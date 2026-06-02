@@ -9,6 +9,16 @@ HTTP service/container 기본값(`CLEAN_WALLET_ATTESTOR=phala`)에서는 fixture
 
 ---
 
+## GitHub 이용자 문서
+
+처음 보는 이용자는 아래 순서로 읽으면 됩니다.
+
+- [User Guide](docs/USER_GUIDE.md): UFVK/FVK 제출, 결과 해석, 로컬 artifact 생성
+- [Architecture](docs/ARCHITECTURE.md): enclave scan flow와 주요 컴포넌트
+- [Security & Privacy Notes](docs/SECURITY_PRIVACY.md): viewing capability 취급, attestation 확인, PASS 한계
+
+---
+
 ## 무엇을 증명하는가
 
 `PASS`가 의미하는 것:
