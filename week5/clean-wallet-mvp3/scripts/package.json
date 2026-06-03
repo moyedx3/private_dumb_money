@@ -1,0 +1,16 @@
+{
+  "name": "clean-wallet-scripts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "gen:vectors": "tsx gen-vectors.ts"
+  },
+  "dependencies": {
+    "canonicalize": "^2.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
