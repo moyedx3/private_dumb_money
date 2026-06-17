@@ -6,6 +6,16 @@ Order: do **#1** first (cheapest, kills the buyer flow), then **#2** (the TEE co
 
 ---
 
+## ✅ RESULTS — all three passed (2026-06-18)
+
+- **#1 Zashi memo** — scanned a ZIP-321 QR (Orchard UA + `memo`) with Zashi; the memo `spike12|drop=1|epub=TESTKEY` carried through and landed on mainnet (txid `ae11a454…`).
+- **#2 IVK incoming + memo** — `ivk-incoming-probe` recovered that **exact** memo from the full tx with **only the IVK** (value 0.0001 ZEC, memo byte-identical). **Gotcha found live:** the fresh tx's consensus branch `0x5437f330` (current mainnet NU) was unknown to `zcash_primitives 0.27` → deserialize failed until the probe rewrote the embedded branch id (irrelevant to decryption). A scanner whose librustzcash lags a NU silently misses every post-NU payment — Lane A1 must track NUs or decode branch-tolerantly. (See feasibility-review §3.6 / C6.)
+- **#3 secret-IN @ real Phala** — sealed env decrypted only inside the enclave (sha256 match), genuine Intel TDX quote, operator saw only ciphertext. (See `spike3/RUNBOOK.md`.)
+
+**The spec's three gating unknowns are resolved → Phase 1 is cleared for `writing-plans`.**
+
+---
+
 ## Spike #1 — Zashi honors a ZIP-321 QR memo to a shielded address
 
 **Goal:** prove that *the exact Zashi build + device you'll demo with* will scan a ZIP-321 QR pointing at a **shielded** address with a `memo` param and produce a shielded tx that actually carries that memo. (External research says yes, but with historical gaps in `zcash:` handling — so verify, don't trust.)

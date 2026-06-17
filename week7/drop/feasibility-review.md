@@ -75,7 +75,7 @@ This is the reassuring half. The components people *assume* are the hard part of
 
 ---
 
-## 3. The five corrections the spec needs (the "sober" part)
+## 3. The six corrections the spec needs (the "sober" part)
 
 These are the places where `spec.md` is wrong, understated, or quietly assumes something that bit you before.
 
@@ -113,9 +113,17 @@ In a hackathon you rebuild constantly. This will eat funds unless you (a) spend 
 
 If anyone on the team pictures Intents delivering into the creator's Orchard address: it can't. **NEAR Intents only ever touches transparent `t`-addresses.** The "private ZEC" UX you see in Zashi/Cake is the *wallet* auto-shielding *after* a transparent swap. So Phase 2's real path is: enclave **unshields** → transparent ZEC → Intents deposit address → target chain. The spec's §7.5 already says this; just make sure the whole team internalizes that **the unshield is mandatory and the creator's revenue stream becomes transparent at that hop.**
 
+### 3.6 The scanner library must track mainnet network upgrades (found live during spike #2)
+
+Surfaced while verifying spike #2 on mainnet: a **freshly-created** payment carried consensus branch `0x5437f330` (the current mainnet NU), and `zcash_primitives 0.27` rejected it — *"invalid consensus branch id"* — while older txs (height ~2.7M) parsed fine. A scanner whose librustzcash predates a network upgrade **silently fails to deserialize every transaction after that NU** → it misses all payments post-upgrade. That's a payment-detection outage, not a crash you'd notice.
+
+**Fix (either):** (a) keep the zcash crates current with each mainnet NU, or (b) decode **branch-tolerantly** — the consensus branch id is irrelevant to IVK note decryption (the v5 byte layout is identical, and the indexer trusts lightwalletd for tx validity), so rewrite the embedded branch to a known one before parsing. `ivk-incoming-probe` now does (b). **Lane A1 must own this**, or the indexer goes dark the next time mainnet upgrades.
+
 ---
 
-## 4. Phase 1 verdict: 🟢 GREEN, with three conditions
+## 4. Phase 1 verdict: 🟢 GREEN — all three gating spikes now verified (2026-06-18)
+
+The Phase-1 MVP (creator owns address, IVK only, shielded→shielded, no NEAR) is **buildable** and demo-able. The three conditions below were the gates — **all now passed live** (spike #1 Zashi memo, spike #2 IVK+memo recovery, spike #3 secret-IN on real Phala):
 
 The Phase-1 MVP (creator owns address, IVK only, shielded→shielded, no NEAR) is **buildable** and demo-able. Conditions:
 

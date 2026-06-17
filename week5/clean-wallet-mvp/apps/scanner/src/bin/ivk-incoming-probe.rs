@@ -135,9 +135,28 @@ async fn main() -> Result<()> {
         let branch_id = BranchId::for_height(&network, bh);
         let tx = match Transaction::read(&raw[..], branch_id) {
             Ok(t) => t,
-            Err(e) => {
-                eprintln!("  (skip) failed to deserialize tx: {e}");
-                continue;
+            Err(_) => {
+                // A v5 tx embeds its own consensus branch id at bytes [8..12]. A branch
+                // newer than this librustzcash build (e.g. a 2026 network upgrade) fails
+                // the parse even though the v5 byte layout is identical and the branch id
+                // is irrelevant to note decryption. Rewrite it to NU5 and retry.
+                if raw.len() > 12 && raw[0..4] == [0x05, 0x00, 0x00, 0x80] {
+                    let mut patched = raw.clone();
+                    patched[8..12].copy_from_slice(&0xC2D6_D0B4u32.to_le_bytes()); // NU5
+                    match Transaction::read(&patched[..], BranchId::Nu5) {
+                        Ok(t) => {
+                            eprintln!("  (note) unknown consensus branch — patched to NU5 for decryption");
+                            t
+                        }
+                        Err(e) => {
+                            eprintln!("  (skip) deserialize failed even after branch patch: {e}");
+                            continue;
+                        }
+                    }
+                } else {
+                    eprintln!("  (skip) failed to deserialize tx (unknown branch, not a v5 tx)");
+                    continue;
+                }
             }
         };
         let txid_be = {
