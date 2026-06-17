@@ -1,0 +1,24 @@
+# Spike #3 (real Phala / Intel TDX): prove a SEALED secret reaches only the measured enclave.
+# Flow: phala deploy → phala envs update (seals K_DROP_TEST) → read logs → phala cvms attestation.
+# The container only ever prints the secret's sha256 (never the plaintext), so logs are safe.
+services:
+  proof:
+    image: alpine:3.20
+    restart: unless-stopped
+    # dstack decrypts the sealed env and exposes it for compose interpolation;
+    # the container only receives it if we map it through here.
+    environment:
+      K_DROP_TEST: ${K_DROP_TEST:-}
+    command:
+      - sh
+      - -c
+      - |
+        echo "=== spike3 proof: can the measured enclave read the sealed secret? ==="
+        if [ -n "$$K_DROP_TEST" ]; then
+          LEN=$${#K_DROP_TEST}
+          H=$$(printf %s "$$K_DROP_TEST" | sha256sum | cut -d' ' -f1)
+          echo "DECRYPTED-INSIDE-ENCLAVE len=$$LEN sha256=$$H"
+        else
+          echo "NO-SECRET-VISIBLE (run: phala envs update <cvm> -e K_DROP_TEST=...)"
+        fi
+        while true; do sleep 3600; done
