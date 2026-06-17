@@ -6,10 +6,10 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
-from .attestation import MockAttestor
+from .attestation import Attestor
 from .blacklist import BlacklistManifest, verify_manifest
 from .crypto import canonical_json, constant_time_equal, sha256_hex
-from .scanner import BlockRange, FixtureScanner, viewing_scope_commitment
+from .scanner import BlockRange, Scanner, viewing_scope_commitment
 
 RESULT_PASS = "PASS"
 RESULT_FAIL = "FAIL"
@@ -35,10 +35,10 @@ def compute_report_hash(report_without_hash_or_quote: dict[str, Any]) -> str:
 def create_report(
     *,
     request: ProofRequest,
-    scanner: FixtureScanner,
+    scanner: Scanner,
     manifest: BlacklistManifest,
     blacklist_signing_key: str,
-    attestor: MockAttestor,
+    attestor: Attestor,
     scanner_version: str,
     timestamp_utc: str | None = None,
 ) -> dict[str, Any]:
@@ -62,7 +62,11 @@ def create_report(
     body: dict[str, Any] = {
         "schema_version": "clean-wallet-report-v0",
         "result": result,
-        "claim": "No exact commitment overlap within declared scope" if result == RESULT_PASS else "Bounded exact-overlap check completed",
+        "claim": (
+            "No exact commitment overlap within declared scope"
+            if result == RESULT_PASS
+            else "Bounded exact-overlap check completed"
+        ),
         "network": request.network,
         "pool": request.pool,
         "block_range": request.block_range.to_dict(),
@@ -93,7 +97,7 @@ def verify_report(
     report: dict[str, Any],
     manifest: BlacklistManifest,
     blacklist_signing_key: str,
-    attestor: MockAttestor,
+    attestor: Attestor,
     allowed_measurements: set[str],
     max_age_seconds: int | None = None,
     now: datetime | None = None,

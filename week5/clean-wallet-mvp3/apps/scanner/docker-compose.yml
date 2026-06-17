@@ -1,0 +1,15 @@
+services:
+  scanner:
+    image: ${IMAGE}
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      LIGHTWALLETD_PRIMARY: "https://zec.rocks:443"
+      LIGHTWALLETD_BACKUP: ""
+      NETWORK: "mainnet"
+      MAX_RANGE_BLOCKS: "100000"
+      DSTACK_SOCKET: "/var/run/dstack.sock"
+      RUST_LOG: "info,clean_wallet_scanner=debug"
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock

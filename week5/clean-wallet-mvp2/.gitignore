@@ -2,3 +2,5 @@ __pycache__/
 *.py[cod]
 artifacts/*.json
 .omx/
+
+zcash_scanner/target/
