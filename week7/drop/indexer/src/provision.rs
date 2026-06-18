@@ -43,6 +43,15 @@ pub fn open_provision(sealed: &[u8], kp: &StackKeyPair) -> anyhow::Result<(u64, 
     ))
 }
 
+/// Creator-side seal (interface I5): libsodium `crypto_box_seal` of `msg` to the enclave
+/// pubkey. Lane C does this in libsodium.js; provided here for Rust clients + tests.
+pub fn seal_to_enclave(msg: &[u8], enclave_pubkey: &[u8]) -> Vec<u8> {
+    let pk = key_bytes(enclave_pubkey);
+    let mut sealed = vec![0u8; msg.len() + CRYPTO_BOX_SEALBYTES];
+    dryoc::classic::crypto_box::crypto_box_seal(&mut sealed, msg, &pk).expect("seal");
+    sealed
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -12,6 +12,7 @@ pub mod attest;
 pub mod provision;
 pub mod catalog;
 pub mod bucket;
+pub mod server;
 
 /// Internal drop config (interface I3-b). Read by A1's engine via the `Catalog` trait.
 #[derive(Clone)]
