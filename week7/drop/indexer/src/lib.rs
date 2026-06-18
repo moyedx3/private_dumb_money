@@ -9,6 +9,7 @@
 
 pub mod dstack;
 pub mod attest;
+pub mod provision;
 
 /// Internal drop config (interface I3-b). Read by A1's engine via the `Catalog` trait.
 #[derive(Clone)]
