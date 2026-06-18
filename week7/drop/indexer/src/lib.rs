@@ -7,6 +7,8 @@
 //! These boundary types are shared with Lane A1: A1 *mocks* them; A2 provides the
 //! real implementations (catalog.rs, bucket.rs).
 
+pub mod dstack;
+
 /// Internal drop config (interface I3-b). Read by A1's engine via the `Catalog` trait.
 #[derive(Clone)]
 pub struct DropConfig {
