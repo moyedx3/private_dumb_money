@@ -148,6 +148,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reprovision_same_drop_overwrites() {
+        // After a rebuild (new keypair), a creator re-provisions; the catalog must overwrite
+        // by drop_id, not duplicate (C4). Here: same drop_id, updated price.
+        let app = router(test_state([7u8; 32]));
+        let kp = crate::attest::provisioning_keypair_from_seed(&[7u8; 32]);
+        let seal_price = |price: u64| {
+            let payload = crate::ProvisionPayload {
+                drop_id: 1,
+                price_zat: price,
+                k_drop_hex: hex::encode([2u8; 32]),
+                creator_ufvk: "uview1x".into(),
+                h_content: "h1".into(),
+            };
+            seal_to_enclave(&serde_json::to_vec(&payload).unwrap(), &kp.public_key)
+        };
+        for price in [500u64, 700] {
+            let res = app
+                .clone()
+                .oneshot(Request::post("/provision?title=Cat").body(Body::from(seal_price(price))).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(res.status(), 200);
+        }
+        let res = app.oneshot(Request::get("/catalog").body(Body::empty()).unwrap()).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let s = String::from_utf8(body.to_vec()).unwrap();
+        assert!(s.contains("\"price_zat\":700")); // latest wins
+        assert_eq!(s.matches("\"drop_id\":1").count(), 1); // exactly one entry
+    }
+
+    #[tokio::test]
     #[ignore]
     async fn live_attest_route_returns_quote() {
         let sock = std::env::var("DSTACK_SOCKET").expect("set DSTACK_SOCKET");

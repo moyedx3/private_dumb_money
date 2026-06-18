@@ -4,6 +4,13 @@
 //! provisioning public key using libsodium `crypto_box_seal` (Lane C uses libsodium.js — the
 //! wire format is identical). Only the measured enclave, holding the KMS-derived secret key,
 //! can open it; the Phala operator only ever sees ciphertext.
+//!
+//! **C4 (rebuild continuity).** The enclave's provisioning keypair is KMS-derived from the code
+//! *measurement*. Rebuilding the image changes the measurement → changes the keypair → a creator
+//! who provisioned to the OLD build can no longer reach the new one. Operational rule: after any
+//! code change + redeploy, creators must re-`POST /provision`. Re-provisioning is idempotent per
+//! `drop_id` (the catalog overwrites), so re-sending is safe. Creators detect a measurement change
+//! via the `mr_td` published alongside the image (Task 8).
 
 use dryoc::classic::crypto_box::crypto_box_seal_open;
 use dryoc::constants::CRYPTO_BOX_SEALBYTES;
