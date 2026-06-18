@@ -1,12 +1,12 @@
 # Unlockable Drop — Technical Spec (v1, feasibility-corrected)
 
 - **Status**: Reality-checked revision of `week4/drop/spec.md` (v0).
-- **Supersedes**: `week4/drop/spec.md`. The architecture and security goals are unchanged; this version corrects five load-bearing technical claims that were wrong or understated in v0, based on (a) the code actually shipped in `week5/clean-wallet-mvp/`, and (b) the live Zcash/NEAR/Phala specs. See the companion [`feasibility-review.md`](./feasibility-review.md) for the evidence behind each correction.
+- **Supersedes**: `week4/drop/spec.md`. The architecture and security goals are unchanged; this version corrects six load-bearing technical claims that were wrong or understated in v0, based on (a) the code actually shipped in `week5/clean-wallet-mvp/`, (b) the live Zcash/NEAR/Phala specs, and (c) what the three pre-build spikes verified live (all passed — see `team/00-overview.md`).
 - **Hard requirement (unchanged)**: The Indexer **MUST NOT** be able to decrypt content blobs. Enforced by Intel TDX + remote attestation, not trust.
 
 ---
 
-## Changelog v0 → v1 (the five corrections)
+## Changelog v0 → v1 (the six corrections)
 
 | # | What v0 said | What's actually true | Where fixed |
 |---|---|---|---|
@@ -15,6 +15,7 @@
 | **C3** | "Creator opens an attested-TLS channel and submits K_drop, e2e-encrypted to the enclave." | This is a *secret-IN* attestation flow (seal a secret so only the measured binary reads it). clean-wallet only ever did *result-OUT* attestation. This is genuinely new and is the **real Phase-1 integration risk**. | §4.1, §7.8, §8 |
 | **C4** | §7.6 framed the in-enclave spending key as a *trust* escalation. | It's also an **operational fund-loss footgun**: dstack/KMS derives enclave keys from the **code measurement (MRTD)**. Rebuild the image → key changes → **ZEC at the old shielded address becomes unspendable**. In-enclave Zcash key derivation is also DIY (Phala ships none). | §7.6, §8, §9 |
 | **C5** | Phase 2: "shielded payment → … → NEAR Intents." | NEAR Intents touches **transparent `t`-addresses only**. "Private ZEC" UX is *wallet-side* auto-shielding, which Intents does not provide. The unshield is mandatory and exposes the creator's revenue at that hop. (v0 §7.5 already hinted this; v1 makes it unmissable.) | §7.5 |
+| **C6** | (not in v0 — found live during spike #2) | A freshly-created mainnet tx used consensus branch `0x5437f330` (the current network upgrade); `zcash_primitives 0.27` **rejects** it ("invalid consensus branch id") while older txs parse. A scanner whose librustzcash lags a network upgrade **silently misses every payment after it**. Fix: keep the zcash crates current, or decode **branch-tolerantly** (the branch id is irrelevant to IVK note decryption) — `ivk-incoming-probe` rewrites the embedded branch to NU5 before parsing. | Lane A1 build (branch-tolerant read) |
 
 ---
 
@@ -361,7 +362,6 @@ Three creators (us); audience as buyers. Each creator pre-uploads one drop. Atte
 
 ## 12. References
 
-- Companion: [`feasibility-review.md`](./feasibility-review.md) — evidence behind every `[C#]` correction.
 - Reused code: [`../../week5/clean-wallet-mvp/`](../../week5/clean-wallet-mvp/) (`apps/scanner/src/{scan,lightwalletd,attest}.rs`).
 - ZIP-321 payment URIs. [zips.z.cash/zip-0321](https://zips.z.cash/zip-0321)
 - ZIP-302 memo field (512 bytes). [zips.z.cash/zip-0302](https://zips.z.cash/zip-0302)

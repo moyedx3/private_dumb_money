@@ -174,7 +174,7 @@ A1(blob put)·B(blob get)·C(content put)가 붙을 **최소 버킷**. 데모는
 | 로그의 `DECRYPTED-INSIDE-ENCLAVE sha256=…` | `Catalog`에 `DropConfig` 저장 |
 | `phala envs encrypt`(오프라인 암호문) | 크리에이터가 `/attest`로 받은 pubkey로 `crypto_box_seal` |
 
-→ 스파이크 #3가 "비밀이 measured enclave에만 들어가고 운영자는 암호문만 본다"를 **진짜 하드웨어로 이미 증명**했으므로, A2가 남긴 건 *증명*이 아니라 **그 봉인을 받는 런타임 문(`/provision`)을 짜는 일**뿐이다 (feasibility-review §3.3, spec §4.1 `[C3]`).
+→ 스파이크 #3가 "비밀이 measured enclave에만 들어가고 운영자는 암호문만 본다"를 **진짜 하드웨어로 이미 증명**했으므로, A2가 남긴 건 *증명*이 아니라 **그 봉인을 받는 런타임 문(`/provision`)을 짜는 일**뿐이다 (spec §4.1 `[C3]`).
 
 ---
 

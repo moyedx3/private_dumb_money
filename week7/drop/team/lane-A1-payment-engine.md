@@ -1,6 +1,6 @@
 # Lane A1 — 결제-플로우 엔진 (Rust #1)
 
-> 같이 읽기: [`00-overview.md`](./00-overview.md) (프로젝트 전체) · [`interfaces.md`](./interfaces.md) (바이트 계약 — I1·I2·I3) · [`../plan-a1-payment-flow.md`](../plan-a1-payment-flow.md) (이 레인의 TDD 단계별 계획). 스펙 근거: [`../spec.md`](../spec.md) §4.3·§7.3, [`../feasibility-review.md`](../feasibility-review.md) §3.1/§3.2/§3.6 (= C6).
+> 같이 읽기: [`00-overview.md`](./00-overview.md) (프로젝트 전체) · [`interfaces.md`](./interfaces.md) (바이트 계약 — I1·I2·I3) · [`../plan-a1-payment-flow.md`](../plan-a1-payment-flow.md) (이 레인의 TDD 단계별 계획). 스펙 근거: [`../spec.md`](../spec.md) §4.3·§7.3 + 체인지로그 C1–C6 (특히 C6 = 브랜치 함정).
 >
 > **읽는 사람:** Rust는 능숙하지만 Zcash/TEE는 처음인 개발자. 도메인 지식은 본문에서 풀어 쓰고, 정확한 바이트 배치는 매번 다시 유도하지 말고 `interfaces.md`의 번호를 가리킨다.
 

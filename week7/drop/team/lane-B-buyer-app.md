@@ -140,7 +140,7 @@ const plaintext = new Uint8Array(
 ## 5. 재사용 (바닥부터 안 짠다)
 
 - **스파이크 #1이 이미 증명한 경로** — "Zashi가 ZIP-321 QR의 `memo=`를 실제로 체인에 실어 보낸다." (진짜 폰, mainnet, 메모 `spike12|drop=1|epub=TESTKEY`가 그대로 실림, 0.0001 ZEC, txid `ae11a454…`.) (c)의 결제 화면은 이 검증된 레시피를 *그대로* 따른다.
-- **정확한 ZIP-321 + base64url-메모 레시피**는 `spikes.md`(#1 스텝)에 박제돼 있다: `zcash:<shielded_addr>?amount=...&memo=<base64url>`, 메모는 512B 미만(우린 40B). 그 문서가 (c)의 사실상 의사코드다.
+- **정확한 ZIP-321 + base64url-메모 레시피**(인라인): `zcash:<shielded_addr>?amount=...&memo=<base64url>`, 메모는 512B 미만(우린 40B). 정확한 바이트 형식은 `interfaces.md` I1 참조.
 - **UFVK/UA 생성 도구 재사용** — 스파이크에서 쓴 `week5/clean-wallet-mvp/apps/scanner/src/bin/gen-ua.rs`(또는 `gen-ufvk.rs`)로 테스트용 수신 주소를 만든다. (테스트할 때 "내가 보낸 메모가 진짜 실렸나"를 확인하는 수신 측 주소.)
 - **QR 라이브러리** 하나(예: `qrcode`) — QR은 직접 구현하지 말 것.
 - **암호 라이브러리** `libsodium-wrappers`(키쌍·sealed box·base64url) + WebCrypto(AES-GCM). 서버 `dryoc`와 바이트 호환.
@@ -195,7 +195,7 @@ const plaintext = new Uint8Array(
 
 3. **네트워크 계층 상관관계는 문서화된 out-of-scope 한계.** 구매자 IP가 버킷을 폴링하고 Zashi가 tx를 브로드캐스트하는 시점/IP를 같은 관찰자가 보면, *체인 밖에서* 둘을 엮을 여지가 있다(Tor/믹스넷 없이는 못 막음). 이건 **데모 범위에서 의도적으로 안 막는다** — 위협 모델에 적힌 알려진 한계이지 버그가 아니다(spec §7.3, §1 non-goals). UI/문서에 한 줄 명시.
 
-4. **데모에 쓸 바로 그 Zashi 빌드/기기에서 메모 경로를 검증.** 스파이크 #1은 특정 빌드·OS에서 통과했다. Zashi 버전이 바뀌면 ZIP-321/메모 처리가 또 달라질 수 있다(`zcash:` 처리에 역사적 공백 있었음 — spikes.md #1). **데모 직전, 실제 데모 폰의 실제 Zashi 빌드로** §6-(1)을 다시 한 번 PASS시켜라. 버전·OS를 런북에 적어둘 것.
+4. **데모에 쓸 바로 그 Zashi 빌드/기기에서 메모 경로를 검증.** 스파이크 #1은 특정 빌드·OS에서 통과했다. Zashi 버전이 바뀌면 ZIP-321/메모 처리가 또 달라질 수 있다(`zcash:` 처리에 역사적 공백 있었음). **데모 직전, 실제 데모 폰의 실제 Zashi 빌드로** §6-(1)을 다시 한 번 PASS시켜라. 버전·OS를 런북에 적어둘 것.
 
 5. **base64url은 손으로 치환하지 말 것.** 패딩 유무, `+/`↔`-_` 치환을 직접 하다 한 글자 틀리면 A1이 메모를 못 읽는다. `sodium.to_base64(..., URLSAFE_NO_PADDING)`만 써라. (interfaces.md I1: "base64url(패딩 없음)".)
 

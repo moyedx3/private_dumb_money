@@ -166,7 +166,7 @@ use zcash_protocol::consensus::{BlockHeight, BranchId, Network};
 
 /// A v5 tx embeds its consensus branch id at bytes [8..12]. A branch newer than this
 /// librustzcash build fails the parse though the layout is identical and the branch id
-/// is irrelevant to note decryption. Rewrite it to NU5. (See feasibility-review C6.)
+/// is irrelevant to note decryption. Rewrite it to NU5. (See spec.md changelog C6.)
 pub fn patch_v5_branch_to_nu5(raw: &[u8]) -> Vec<u8> {
     let mut p = raw.to_vec();
     if p.len() > 12 && p[0..4] == [0x05, 0x00, 0x00, 0x80] {
