@@ -8,6 +8,7 @@
 //! real implementations (catalog.rs, bucket.rs).
 
 pub mod dstack;
+pub mod attest;
 
 /// Internal drop config (interface I3-b). Read by A1's engine via the `Catalog` trait.
 #[derive(Clone)]

@@ -47,6 +47,18 @@ impl Dstack {
         tcb.get("mrtd").and_then(|v| v.as_str()).map(|s| s.to_string())
             .ok_or_else(|| anyhow!("dstack /Info: missing 'mrtd'"))
     }
+
+    /// Derive a stable, app-bound 32-byte secret from the dstack KMS (`/GetKey`; confirmed
+    /// against the v0.5.3 simulator — response `{ key: <64-hex>, signature_chain: [...] }`).
+    /// Stable per measurement → used as the provisioning keypair seed. Changes on rebuild (C4).
+    pub async fn get_key(&self, path: &str) -> Result<[u8; 32]> {
+        let resp = post_uds_json(&self.socket, "/GetKey", &serde_json::json!({ "path": path })).await?;
+        let hexk = resp.get("key").and_then(|v| v.as_str())
+            .ok_or_else(|| anyhow!("dstack /GetKey: missing 'key'"))?;
+        let raw = hex::decode(hexk)?;
+        raw.as_slice().try_into()
+            .map_err(|_| anyhow!("dstack key not 32 bytes (got {})", raw.len()))
+    }
 }
 
 /// Minimal HTTP/1.1 POST with a JSON body over a unix socket; parse the JSON response.
@@ -100,5 +112,16 @@ mod tests {
         let ds = Dstack::new(sock);
         let q = ds.get_quote(&[1u8; 32]).await.unwrap();
         assert!(!q.is_empty());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn live_simulator_derives_stable_key() {
+        let sock = std::env::var("DSTACK_SOCKET").expect("set DSTACK_SOCKET to the simulator socket");
+        let ds = Dstack::new(sock);
+        let a = ds.get_key("drop/provisioning").await.unwrap();
+        let b = ds.get_key("drop/provisioning").await.unwrap();
+        assert_eq!(a, b); // stable per measurement
+        assert_ne!(a, [0u8; 32]); // actually derived
     }
 }
