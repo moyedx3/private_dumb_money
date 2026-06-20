@@ -10,6 +10,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use dryoc::keypair::StackKeyPair;
 use serde::Deserialize;
+use tower_http::cors::CorsLayer;
 
 use crate::attest::{build_attest_response, provisioning_keypair_from_seed, AttestResponse};
 use crate::bucket::FsBucket;
@@ -51,6 +52,9 @@ pub fn router(st: AppState) -> Router {
         .route("/catalog", get(catalog_h))
         .route("/bucket/:key", get(bucket_get_h).put(bucket_put_h))
         .with_state(st)
+        // Lane B/C are browser clients calling cross-origin. Permissive for the demo;
+        // tighten to the known web origins for production.
+        .layer(CorsLayer::permissive())
 }
 
 async fn attest_h(State(s): State<AppState>) -> Result<Json<AttestResponse>, StatusCode> {
@@ -176,6 +180,26 @@ mod tests {
         let s = String::from_utf8(body.to_vec()).unwrap();
         assert!(s.contains("\"price_zat\":700")); // latest wins
         assert_eq!(s.matches("\"drop_id\":1").count(), 1); // exactly one entry
+    }
+
+    #[tokio::test]
+    async fn cross_origin_request_gets_cors_header() {
+        // Lane B (buyer) and C (creator) are browser apps that call this API cross-origin;
+        // without an Access-Control-Allow-Origin header the browser blocks every call.
+        let app = router(test_state([1u8; 32]));
+        let res = app
+            .oneshot(
+                Request::get("/health")
+                    .header("origin", "https://buyer.example")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(
+            res.headers().contains_key("access-control-allow-origin"),
+            "browser cross-origin calls (Lane B/C) need a CORS header"
+        );
     }
 
     #[tokio::test]
