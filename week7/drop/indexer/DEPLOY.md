@@ -5,6 +5,19 @@
 > so run these from a machine with Docker Desktop WSL integration on.) Same flow as
 > [`../spike3/RUNBOOK.md`](../spike3/RUNBOOK.md), which already worked on real Phala.
 
+## ✅ DEPLOYED & VERIFIED on real Intel TDX (2026-06-20)
+
+Built (`rust:1.90`, dryoc 0.8) → pushed to GHCR (public) → deployed a `tdx.small` CVM. Verified end to end:
+
+- **Container up:** logs show `drop-indexer listening on :8080` → `main.rs` derived its provisioning seed via dstack `get_key` **on real Phala** (same as the simulator) and serves.
+- **Genuine TDX attestation:** `Status Online`, 3-cert chain, `Mrtd f06dfda6…826980` (shared dstack base), **`Rtmr3 4c3fe02fdc6bcdad…2ace8cb7`** (this image's app measurement — what Lane C compares against).
+- **Live routes** (`https://88feb6bc3273df0186f16cfbccd3d3be661b776c-8080.dstack-pha-prod5.phala.network`): `/health`→`ok`, `/catalog`→`[]`, `/attest`→ real 10020-hex quote + provisioning pubkey.
+- **Trust binding holds on hardware:** the quote's `report_data[0:32]` **==** `sha256(provisioning_pubkey)` (verified `f6a1e8a5…`). This is exactly the check Lane C runs before sealing `K_drop`.
+
+App ID `app_88feb6bc3273df0186f16cfbccd3d3be661b776c` · image `ghcr.io/moyedx3/private_dumb_money/drop-indexer:5fdbf9a`. **Lane C:** compare the running `Rtmr3` against a reproducible rebuild of this commit before trusting a server.
+
+---
+
 ## 1. Build + push the image — GHCR package MUST be public (Phala pulls anonymously)
 
 ```bash
