@@ -27,12 +27,25 @@ impl CatalogStore {
             .iter()
             .map(|(id, (c, title))| CatalogEntry {
                 drop_id: *id,
-                price_zat: c.price_zat,
+                price_zec: zat_to_zec_string(c.price_zat),
                 h_content: c.h_content.clone(),
                 title: title.clone(),
             })
             .collect()
     }
+}
+
+fn zat_to_zec_string(zat: u64) -> String {
+    let whole = zat / 100_000_000;
+    let frac = zat % 100_000_000;
+    if frac == 0 {
+        return whole.to_string();
+    }
+    let mut frac_s = format!("{frac:08}");
+    while frac_s.ends_with('0') {
+        frac_s.pop();
+    }
+    format!("{whole}.{frac_s}")
 }
 
 impl Catalog for CatalogStore {
@@ -66,8 +79,18 @@ mod tests {
         let public = store.public_entries();
         assert_eq!(public.len(), 1);
         assert_eq!(public[0].h_content, "h1");
+        assert_eq!(public[0].price_zec, "0.000005");
         // the public JSON must not leak the viewing key (or any secret)
         let json = serde_json::to_string(&public).unwrap();
         assert!(!json.contains("uview1secret"));
+    }
+
+    #[test]
+    fn public_catalog_formats_price_zec_for_interfaces_i3a() {
+        assert_eq!(zat_to_zec_string(0), "0");
+        assert_eq!(zat_to_zec_string(1), "0.00000001");
+        assert_eq!(zat_to_zec_string(1_000_000), "0.01");
+        assert_eq!(zat_to_zec_string(100_000_000), "1");
+        assert_eq!(zat_to_zec_string(123_456_789), "1.23456789");
     }
 }

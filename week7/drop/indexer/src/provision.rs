@@ -44,11 +44,11 @@ pub fn open_provision(sealed: &[u8], kp: &StackKeyPair) -> anyhow::Result<(u64, 
     let mut p: ProvisionPayload = serde_json::from_slice(&plain)?;
     plain.zeroize(); // the decrypted JSON carried k_drop
 
-    let mut raw = hex::decode(&p.k_drop_hex)?;
-    p.k_drop_hex.zeroize();
+    let mut raw = hex::decode(&p.k_drop)?;
+    p.k_drop.zeroize();
     let k_drop_res: Result<[u8; 32], _> = raw.as_slice().try_into();
     raw.zeroize();
-    let k_drop = k_drop_res.map_err(|_| anyhow::anyhow!("k_drop_hex is not 32 bytes"))?;
+    let k_drop = k_drop_res.map_err(|_| anyhow::anyhow!("k_drop is not 32 bytes"))?;
 
     Ok((
         p.drop_id,
@@ -84,7 +84,7 @@ mod tests {
         let payload = crate::ProvisionPayload {
             drop_id: 1,
             price_zat: 1_000_000,
-            k_drop_hex: hex::encode([0xAB; 32]),
+            k_drop: hex::encode([0xAB; 32]),
             creator_ufvk: "uview1demo".into(),
             h_content: "abc123".into(),
         };

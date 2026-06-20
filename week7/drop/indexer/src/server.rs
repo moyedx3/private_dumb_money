@@ -126,7 +126,7 @@ mod tests {
         let payload = crate::ProvisionPayload {
             drop_id: 1,
             price_zat: 500,
-            k_drop_hex: hex::encode([2u8; 32]),
+            k_drop: hex::encode([2u8; 32]),
             creator_ufvk: "uview1secret".into(),
             h_content: "h1".into(),
         };
@@ -147,6 +147,7 @@ mod tests {
         let body = axum::body::to_bytes(res2.into_body(), usize::MAX).await.unwrap();
         let s = String::from_utf8(body.to_vec()).unwrap();
         assert!(s.contains("\"drop_id\":1"));
+        assert!(s.contains("\"price_zec\":\"0.000005\""));
         assert!(s.contains("Cat"));
         assert!(!s.contains("uview1secret")); // secrets stay internal
     }
@@ -161,7 +162,7 @@ mod tests {
             let payload = crate::ProvisionPayload {
                 drop_id: 1,
                 price_zat: price,
-                k_drop_hex: hex::encode([2u8; 32]),
+                k_drop: hex::encode([2u8; 32]),
                 creator_ufvk: "uview1x".into(),
                 h_content: "h1".into(),
             };
@@ -178,7 +179,7 @@ mod tests {
         let res = app.oneshot(Request::get("/catalog").body(Body::empty()).unwrap()).await.unwrap();
         let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
         let s = String::from_utf8(body.to_vec()).unwrap();
-        assert!(s.contains("\"price_zat\":700")); // latest wins
+        assert!(s.contains("\"price_zec\":\"0.000007\"")); // latest wins
         assert_eq!(s.matches("\"drop_id\":1").count(), 1); // exactly one entry
     }
 

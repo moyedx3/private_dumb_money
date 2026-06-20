@@ -36,12 +36,13 @@ pub trait Bucket: Send + Sync {
     async fn list(&self) -> anyhow::Result<Vec<String>>;
 }
 
-/// Interface I5 — what the creator seals to the enclave. `k_drop_hex` is 32 bytes, hex.
+/// Interface I5 — what the creator seals to the enclave. `k_drop` is 32 bytes, hex-encoded
+/// because this demo uses JSON for the "CBOR/JSON" payload allowed by interfaces.md.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProvisionPayload {
     pub drop_id: u64,
     pub price_zat: u64,
-    pub k_drop_hex: String,
+    pub k_drop: String,
     pub creator_ufvk: String,
     pub h_content: String,
 }
@@ -50,7 +51,7 @@ pub struct ProvisionPayload {
 #[derive(serde::Serialize, Clone)]
 pub struct CatalogEntry {
     pub drop_id: u64,
-    pub price_zat: u64,
+    pub price_zec: String,
     pub h_content: String,
     pub title: String,
 }
