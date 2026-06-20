@@ -2,10 +2,11 @@
 # Reproducible build of drop-indexer (Lane A2). Build context = this directory.
 #   docker build -t ghcr.io/<owner>/<repo>/drop-indexer:<tag> .
 # For TRUE reproducibility, pin the builder base by @sha256 digest after your first build
-# (`docker inspect --format='{{index .RepoDigests 0}}' rust:1.88-bookworm`) and rebuild.
+# (`docker inspect --format='{{index .RepoDigests 0}}' rust:1.90-bookworm`) and rebuild.
 # No protoc needed (A2 uses no gRPC; the dstack client is raw HTTP-over-UDS).
+# Rust >= 1.89 required (dryoc 0.8 sets rust-version 1.89, edition 2024).
 
-FROM rust:1.88-bookworm AS builder
+FROM rust:1.90-bookworm AS builder
 WORKDIR /build
 
 # Dependency prefetch layer (cache hit when only src changes). The crate has both a [lib]
