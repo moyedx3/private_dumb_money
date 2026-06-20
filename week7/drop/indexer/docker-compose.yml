@@ -1,0 +1,14 @@
+# drop-indexer on Phala (Intel TDX). Lesson carried over from spike #3: env vars must be
+# mapped through `environment:` to reach the container; the dstack socket must be volume-mounted.
+services:
+  indexer:
+    image: ${IMAGE}
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      BUCKET_DIR: "/data/bucket"
+      DSTACK_SOCKET: "/var/run/dstack.sock"
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
