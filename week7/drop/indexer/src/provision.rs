@@ -15,6 +15,7 @@
 use dryoc::classic::crypto_box::crypto_box_seal_open;
 use dryoc::constants::CRYPTO_BOX_SEALBYTES;
 use dryoc::keypair::StackKeyPair;
+use zeroize::Zeroize;
 
 use crate::{DropConfig, ProvisionPayload};
 
@@ -33,17 +34,22 @@ pub fn open_provision(sealed: &[u8], kp: &StackKeyPair) -> anyhow::Result<(u64, 
         anyhow::bail!("sealed payload too short ({} bytes)", sealed.len());
     }
     let pk = key_bytes(&kp.public_key);
-    let sk = key_bytes(&kp.secret_key);
+    let mut sk = key_bytes(&kp.secret_key);
 
     let mut plain = vec![0u8; sealed.len() - CRYPTO_BOX_SEALBYTES];
-    crypto_box_seal_open(&mut plain, sealed, &pk, &sk)
-        .map_err(|e| anyhow::anyhow!("seal_open failed: {e}"))?;
+    let opened = crypto_box_seal_open(&mut plain, sealed, &pk, &sk);
+    sk.zeroize();
+    opened.map_err(|e| anyhow::anyhow!("seal_open failed: {e}"))?;
 
-    let p: ProvisionPayload = serde_json::from_slice(&plain)?;
-    let k_drop: [u8; 32] = hex::decode(&p.k_drop_hex)?
-        .as_slice()
-        .try_into()
-        .map_err(|_| anyhow::anyhow!("k_drop_hex is not 32 bytes"))?;
+    let mut p: ProvisionPayload = serde_json::from_slice(&plain)?;
+    plain.zeroize(); // the decrypted JSON carried k_drop
+
+    let mut raw = hex::decode(&p.k_drop_hex)?;
+    p.k_drop_hex.zeroize();
+    let k_drop_res: Result<[u8; 32], _> = raw.as_slice().try_into();
+    raw.zeroize();
+    let k_drop = k_drop_res.map_err(|_| anyhow::anyhow!("k_drop_hex is not 32 bytes"))?;
+
     Ok((
         p.drop_id,
         DropConfig { price_zat: p.price_zat, k_drop, creator_ufvk: p.creator_ufvk, h_content: p.h_content },
