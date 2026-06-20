@@ -9,6 +9,10 @@ use dryoc::keypair::StackKeyPair;
 /// X25519 keypair whose secret IS the dstack-derived seed; public derived from it.
 /// Deterministic (same seed → same keypair) so a creator who provisioned stays reachable
 /// across restarts — but NOT across rebuilds (a new measurement → new seed; see C4 / Task 9).
+///
+/// Uses `from_secret_key` (NOT `from_seed`) on purpose: the seed IS the X25519 secret, so the
+/// published pubkey and seal_open share one key. `from_seed` would hash the seed and change the
+/// pubkey — silently unreachable for creators who already provisioned. Don't "fix" it to `from_seed`.
 pub fn provisioning_keypair_from_seed(seed: &[u8; 32]) -> StackKeyPair {
     StackKeyPair::from_secret_key((*seed).into())
 }
