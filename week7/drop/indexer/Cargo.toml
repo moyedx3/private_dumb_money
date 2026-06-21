@@ -10,11 +10,23 @@ path = "src/lib.rs"
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
+blake2 = "0.10"
+dryoc = "0.7"
+hex = "0.4"
+orchard = "0.13"
+prost = "0.12"
+sapling-crypto = { version = "0.7", default-features = false }
 tokio = { version = "1", features = ["full"] }
 tonic = { version = "0.11", features = ["tls", "tls-webpki-roots"] }
-prost = "0.12"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "1"
+zecscope-scanner = "0.1"
+zcash_keys = { version = "0.13", default-features = false, features = ["sapling", "orchard"] }
+zcash_note_encryption = "0.4"
+zcash_primitives = "0.27"
+zcash_protocol = "0.8"
+zip32 = "0.2"
 
 [build-dependencies]
 tonic-build = "0.11"
