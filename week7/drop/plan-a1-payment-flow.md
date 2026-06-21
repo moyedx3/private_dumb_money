@@ -6,7 +6,74 @@
 
 **Architecture:** A new `drop-indexer` Rust crate that reuses clean-wallet's proven lightwalletd gRPC client and the branch-tolerant IVK detector from `ivk-incoming-probe`. The engine consumes two **mockable trait boundaries it does not own** — `Catalog` (drop config: price, `K_drop`, creator UFVK — owned by Lane A2) and `Bucket` (blob storage — owned by Lane D) — so A1 builds and tests fully in isolation. The two formats A1 **does** own (memo layout, dispatch-blob layout) are frozen here and must match the team's `interfaces.md`.
 
-**Tech Stack:** Rust, `tokio`, `tonic` (gRPC), `zcash_primitives`/`orchard`/`sapling-crypto`/`zcash_keys` (note decryption), `dryoc` (libsodium-compatible sealed box, interops with Lane B's `libsodium.js`), `anyhow`, `thiserror`.
+**Tech Stack:** Rust, `tokio`, `tonic` (gRPC), `zcash_primitives`/`orchard`/`sapling-crypto`/`zcash_keys` (note decryption), `dryoc` 0.7.x (libsodium-compatible sealed box, interops with Lane B's `libsodium.js`), `anyhow`, `thiserror`.
+
+---
+
+## Current implementation status (2026-06-21)
+
+Overall plan completion: **about 55–60%**. The chain-query, UFVK detection, memo codec, dispatch wrapping, replay guard, and payment engine foundations are working; scan-loop and live smoke remain pending.
+
+| Plan task | Current state | Evidence / files |
+| --- | --- | --- |
+| Task 0 — scaffold + lightwalletd | **Implemented** | `indexer/Cargo.toml`, `indexer/build.rs`, `indexer/proto/*`, `indexer/src/lightwalletd.rs`, `indexer/src/bin/check-lightwalletd.rs`, `indexer/src/lib.rs`; live `check-lightwalletd` can fetch tip/ranges/raw tx bytes. `DropConfig`, `Catalog`, `Bucket` boundaries are now in `lib.rs`. |
+| Task 1 — memo codec | **Implemented and unit-tested** | `indexer/src/memo.rs`; `encode_memo` / `decode_memo` cover 40-byte `drop_id || e_pub`, wrong-length reject, and trailing ZIP-302 zero padding. Added ignored live integration test `indexer/tests/live_chain_memo.rs` for an already-mined memo tx. |
+| Task 2 — branch-tolerant tx reader | **Implemented and unit-tested** | `indexer/src/detect.rs`; tests cover NU5 branch-id patch and txid byte-order helpers. |
+| Task 3 — IVK incoming detector | **Implemented enough for live UFVK detection; golden fixture still missing** | `detect_incoming` handles Sapling/Orchard and now scans both external + internal scopes. `probe-ufvk` live run found Orchard note at height `3363067`, value `74999`, memo `<none>`. Pending: hermetic spike fixture test. |
+| Extra — zecscope compact scan smoke | **Implemented** | `indexer/src/zecscope_adapter.rs`, `indexer/src/bin/zecscope-scan.rs`; live run found the same Orchard candidate from compact blocks. This is a fast candidate-detection helper, not a memo path. |
+| Task 4 — sealed-box dispatch | **Implemented and unit-tested** | `indexer/src/dispatch.rs`; `wrap_k_drop` returns 80-byte libsodium sealed box, buyer-open test passes, `blob_key` returns deterministic blake2b-256 hex. |
+| Task 5 — replay guard | **Implemented and unit-tested** | `indexer/src/engine.rs`; `SeenTxids::first_time` rejects duplicate txids. Demo scope is in-memory; production persistence remains open. |
+| Task 6 — payment engine | **Implemented and unit-tested** | `indexer/src/engine.rs`; `Engine::on_note` does replay check, catalog lookup, underpay skip, sealed-box wrap, opaque key derivation, and `Bucket::put`. Tests cover valid payment, underpay, duplicate txid, and unknown drop. |
+| Task 7 — scan loop | **Not started** | `indexer/src/scan_loop.rs` missing. |
+| Task 8 — live smoke binary | **Not started** | `indexer/src/bin/scan-live.rs` missing. |
+
+### Current runnable commands
+
+Connectivity / raw lightwalletd check:
+
+```bash
+A1_SCAN_START=3363060 A1_SCAN_END=3363067 \
+  cargo run --manifest-path indexer/Cargo.toml --bin check-lightwalletd
+```
+
+Fast compact-block UFVK candidate scan:
+
+```bash
+A1_UFVK=<creator_ufvk> A1_SCAN_START=3363060 A1_SCAN_END=3363067 \
+  cargo run --manifest-path indexer/Cargo.toml --bin zecscope-scan
+```
+
+Full transaction decrypt and memo display:
+
+```bash
+A1_UFVK=<creator_ufvk> A1_SCAN_START=3363067 A1_SCAN_END=3363067 \
+  cargo run --manifest-path indexer/Cargo.toml --bin probe-ufvk
+```
+
+Ignored live integration test for an already-mined memo-bearing shielded tx:
+
+```bash
+A1_UFVK=<creator_ufvk> \
+A1_TXID_HEX=<display_txid_hex> \
+A1_TX_HEIGHT=<height> \
+A1_EXPECTED_DROP_ID=<drop_id> \
+A1_EXPECTED_E_PUB_HEX=<64_hex_chars> \
+cargo test --manifest-path indexer/Cargo.toml --test live_chain_memo -- --ignored --nocapture
+```
+
+Latest verification performed:
+
+```bash
+cargo fmt --manifest-path indexer/Cargo.toml
+cargo check --manifest-path indexer/Cargo.toml
+cargo test --manifest-path indexer/Cargo.toml memo
+cargo test --manifest-path indexer/Cargo.toml dispatch
+cargo test --manifest-path indexer/Cargo.toml engine
+cargo test --manifest-path indexer/Cargo.toml --test live_chain_memo
+cargo test --manifest-path indexer/Cargo.toml detect::tests
+cargo test --manifest-path indexer/Cargo.toml zecscope_adapter
+cargo test --manifest-path indexer/Cargo.toml
+```
 
 ---
 
@@ -47,7 +114,7 @@ pub trait Bucket: Send + Sync { async fn put(&self, key: &str, bytes: &[u8]) -> 
 - Create: `week7/drop/indexer/Cargo.toml`, `week7/drop/indexer/build.rs`, `week7/drop/indexer/src/lib.rs`
 - Copy: `week5/clean-wallet-mvp/apps/scanner/src/lightwalletd.rs` → `indexer/src/lightwalletd.rs`; `.../apps/scanner/proto/*` → `indexer/proto/`
 
-- [ ] **Step 1: Write `Cargo.toml`** (mirror the scanner's working deps; add `dryoc`, `blake2`)
+- [ ] **Step 1: Write `Cargo.toml`** (crate/decrypt/lightwalletd/zecscope/dispatch deps exist)
 
 ```toml
 [package]
@@ -70,7 +137,7 @@ zcash_primitives = "0.27"
 zcash_protocol = "0.8"
 zip32 = "0.2"
 hex = "0.4"
-dryoc = "0.5"
+dryoc = "0.7" # 0.5.x conflicts with current Rust slice as_array; 0.8 conflicts with Zcash sha2 pin
 blake2 = "0.10"
 tracing = "0.1"
 
@@ -78,10 +145,10 @@ tracing = "0.1"
 tonic-build = "0.11"
 ```
 
-- [ ] **Step 2: Copy `build.rs` and proto** (identical to the scanner's; compiles `service.proto` + `compact_formats.proto`)
-- [ ] **Step 3: Write `src/lib.rs`** with the module declarations + the two mock-boundary traits from above (`DropConfig`, `Catalog`, `Bucket`).
-- [ ] **Step 4: Run `cargo build -p drop-indexer`** — Expected: PASS (compiles the lightwalletd client + traits).
-- [ ] **Step 5: Commit** — `git commit -m "feat(drop-indexer): scaffold crate + reuse lightwalletd client"`
+- [x] **Step 2: Copy `build.rs` and proto** (identical to the scanner's; compiles `service.proto` + `compact_formats.proto`)
+- [x] **Step 3: Write `src/lib.rs`** with the module declarations + the two mock-boundary traits from above (`DropConfig`, `Catalog`, `Bucket`).
+- [x] **Step 4: Run `cargo build -p drop-indexer`** — PASS via `cargo check --manifest-path indexer/Cargo.toml` / `cargo test --manifest-path indexer/Cargo.toml`.
+- [x] **Step 5: Commit** — scaffold/lightwalletd work was committed earlier as `Feat: scaffold drop-indexer lightwalletd client` / `Feat: add live lightwalletd check tool`.
 
 ---
 
@@ -89,7 +156,7 @@ tonic-build = "0.11"
 
 **Files:** Create `week7/drop/indexer/src/memo.rs`; Test: same file `#[cfg(test)]`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[cfg(test)]
@@ -109,8 +176,8 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run `cargo test -p drop-indexer memo`** — Expected: FAIL (functions undefined).
-- [ ] **Step 3: Implement**
+- [ ] **Step 2: Run `cargo test -p drop-indexer memo`** — fail-first run skipped; implemented directly in this session.
+- [x] **Step 3: Implement**
 
 ```rust
 /// Drop memo = drop_id (u64 BE, 8 bytes) || e_pub (X25519, 32 bytes) = 40 bytes.
@@ -130,8 +197,8 @@ pub fn decode_memo(memo: &[u8]) -> Option<(u64, [u8; 32])> {
 }
 ```
 
-- [ ] **Step 4: Run `cargo test -p drop-indexer memo`** — Expected: PASS.
-- [ ] **Step 5: Commit** — `git commit -m "feat(drop-indexer): memo codec (drop_id||e_pub)"`
+- [x] **Step 4: Run `cargo test -p drop-indexer memo`** — PASS via `cargo test --manifest-path indexer/Cargo.toml memo`. Also added `cargo test --manifest-path indexer/Cargo.toml --test live_chain_memo` (ignored by default) for existing chain memo fixtures.
+- [x] **Step 5: Commit** — committed as `Feat: add UFVK memo scanner`.
 
 ---
 
@@ -139,7 +206,7 @@ pub fn decode_memo(memo: &[u8]) -> Option<(u64, [u8; 32])> {
 
 **Files:** Create `week7/drop/indexer/src/detect.rs` (start it here); Test: same file.
 
-- [ ] **Step 1: Write the failing test** (a v5 tx with an unknown branch id must still parse)
+- [x] **Step 1: Write the failing test** (a v5 tx with an unknown branch id must still parse)
 
 ```rust
 #[cfg(test)]
@@ -157,8 +224,8 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run `cargo test -p drop-indexer detect::tests::patches`** — Expected: FAIL.
-- [ ] **Step 3: Implement** (the helper proven live in `ivk-incoming-probe`)
+- [x] **Step 2: Run `cargo test -p drop-indexer detect::tests::patches`** — covered with manifest-path test workflow.
+- [x] **Step 3: Implement** (the helper proven live in `ivk-incoming-probe`)
 
 ```rust
 use zcash_primitives::transaction::Transaction;
@@ -184,8 +251,8 @@ pub fn read_tx_lenient(raw: &[u8], network: &Network, height: BlockHeight) -> an
 }
 ```
 
-- [ ] **Step 4: Run `cargo test -p drop-indexer detect::tests::patches`** — Expected: PASS.
-- [ ] **Step 5: Commit** — `git commit -m "feat(drop-indexer): branch-tolerant tx reader (C6)"`
+- [x] **Step 4: Run `cargo test -p drop-indexer detect::tests::patches`** — PASS via `cargo test --manifest-path indexer/Cargo.toml detect::tests`.
+- [x] **Step 5: Commit** — committed as `Feat: add UFVK memo scanner`.
 
 ---
 
@@ -208,7 +275,7 @@ async fn detects_real_mainnet_payment_and_memo() {
 ```
 
 - [ ] **Step 2: Run `cargo test -p drop-indexer detect::tests::detects_real`** — Expected: FAIL.
-- [ ] **Step 3: Implement** (port the proven probe logic; `IncomingNote { value_zat, memo: Vec<u8> }`)
+- [x] **Step 3: Implement** (port the proven probe logic; `IncomingNote { value_zat, memo: Vec<u8> }`). Current implementation also records pool and scans both external/internal scopes.
 
 ```rust
 use sapling_crypto::note_encryption::{try_sapling_note_decryption, PreparedIncomingViewingKey as SaplingPivk, Zip212Enforcement};
@@ -245,8 +312,24 @@ pub fn detect_incoming(ufvk_str: &str, raw_tx: &[u8], network: &Network, height:
 }
 ```
 
-- [ ] **Step 4: Run the test** — Expected: PASS (value 10000, memo `spike12|…`).
-- [ ] **Step 5: Commit** — `git commit -m "feat(drop-indexer): IVK incoming detector w/ memo (golden mainnet fixture)"`
+- [ ] **Step 4: Run the test** — pending golden fixture. Live verification instead found an Orchard note at height `3363067`, value `74999`, memo `<none>`.
+- [x] **Step 5: Commit** — UFVK detector/probe implementation committed as `Feat: add UFVK memo scanner`; golden fixture follow-up remains pending.
+
+---
+
+### Extra Task 3a: zecscope-scanner compact-block smoke (implemented)
+
+This task was added during investigation to cross-check UFVK detection with the public `zecscope-scanner` API from docs.rs. It is not the final memo path, but it is useful for fast candidate detection before full transaction fetch/decrypt.
+
+**Files:**
+- `indexer/src/zecscope_adapter.rs`
+- `indexer/src/bin/zecscope-scan.rs`
+
+- [x] Convert generated lightwalletd compact protobuf structs into `zecscope_scanner::CompactBlock` / `CompactTx` JSON-friendly types.
+- [x] Add `zecscope-scan` binary using `Scanner::new(Network)` + `ScanRequest`.
+- [x] Run live compact scan over `3363060..=3363067`; result: `zecscope.matches=1`, Orchard incoming candidate, `amount_zat=74999`.
+- [x] Unit-test the adapter byte-to-hex conversion.
+- [ ] Normalize zecscope txid output to display byte order or document it clearly in CLI output; current zecscope txid is protocol-order and can differ from explorer/display txid.
 
 ---
 
@@ -254,7 +337,7 @@ pub fn detect_incoming(ufvk_str: &str, raw_tx: &[u8], network: &Network, height:
 
 **Files:** Create `week7/drop/indexer/src/dispatch.rs`; Test: same file.
 
-- [ ] **Step 1: Write the failing test** (TEE seals → buyer opens with e_priv)
+- [x] **Step 1: Write the failing test** (TEE seals → buyer opens with e_priv)
 
 ```rust
 #[cfg(test)]
@@ -275,30 +358,33 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run `cargo test -p drop-indexer dispatch`** — Expected: FAIL.
-- [ ] **Step 3: Implement**
+- [ ] **Step 2: Run `cargo test -p drop-indexer dispatch`** — fail-first run skipped; implemented directly in this session.
+- [x] **Step 3: Implement**. Current implementation uses `dryoc::dryocbox` (`dryoc 0.7.x`) rather than the older plan snippet API because `dryoc 0.5.x` no longer compiles on the current Rust toolchain.
 
 ```rust
-use dryoc::sealedbox::SealedBox;
-use dryoc::types::StackByteArray;
-use blake2::{Blake2b, Digest, digest::consts::U32};
+use anyhow::{anyhow, Result};
+use blake2::{digest::consts::U32, Blake2b, Digest};
+use dryoc::dryocbox::{DryocBox, PublicKey};
 
 /// libsodium sealed box: ek_pub(32) || ciphertext+MAC(48). Buyer opens with e_priv.
-pub fn wrap_k_drop(k_drop: &[u8; 32], e_pub: &[u8; 32]) -> anyhow::Result<Vec<u8>> {
-    let pk: StackByteArray<32> = (*e_pub).into();
-    Ok(SealedBox::seal_to_vec(k_drop, &pk).map_err(|e| anyhow::anyhow!("seal: {e:?}"))?)
+pub fn wrap_k_drop(k_drop: &[u8; 32], e_pub: &[u8; 32]) -> Result<Vec<u8>> {
+    let pk: PublicKey = (*e_pub).into();
+    let sealed = DryocBox::seal_to_vecbox(k_drop, &pk)
+        .map_err(|e| anyhow!("seal K_drop: {e:?}"))?;
+    Ok(sealed.to_vec())
 }
 
 /// Opaque bucket key — no buyer/drop identifier (spec §5).
 pub fn blob_key(ek_pub_prefix: &[u8], txid: &[u8; 32]) -> String {
     let mut h = Blake2b::<U32>::new();
-    h.update(ek_pub_prefix); h.update(txid);
+    h.update(ek_pub_prefix);
+    h.update(txid);
     hex::encode(h.finalize())
 }
 ```
 
-- [ ] **Step 4: Run the test** — Expected: PASS.
-- [ ] **Step 5: Commit** — `git commit -m "feat(drop-indexer): sealed-box K_drop wrap + opaque blob key"`
+- [x] **Step 4: Run the test** — PASS via `cargo test --manifest-path indexer/Cargo.toml dispatch` and full `cargo test --manifest-path indexer/Cargo.toml`.
+- [x] **Step 5: Commit** — committed as `Feat: add payment dispatch engine`.
 
 ---
 
@@ -306,7 +392,7 @@ pub fn blob_key(ek_pub_prefix: &[u8], txid: &[u8; 32]) -> String {
 
 **Files:** Modify `week7/drop/indexer/src/engine.rs` (create it); Test: same file.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the replay guard test**
 
 ```rust
 #[cfg(test)]
@@ -322,8 +408,8 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run `cargo test -p drop-indexer engine::tests::rejects_dup`** — Expected: FAIL.
-- [ ] **Step 3: Implement** (in-memory for the demo; note in code that production persists this)
+- [ ] **Step 2: Run `cargo test -p drop-indexer engine::tests::rejects_dup`** — fail-first run skipped; implemented directly in this session.
+- [x] **Step 3: Implement** (in-memory for the demo; note in code that production persists this)
 
 ```rust
 use std::collections::HashSet;
@@ -336,8 +422,8 @@ impl SeenTxids {
 }
 ```
 
-- [ ] **Step 4: Run the test** — Expected: PASS.
-- [ ] **Step 5: Commit** — `git commit -m "feat(drop-indexer): replay guard"`
+- [x] **Step 4: Run the test** — PASS via `cargo test --manifest-path indexer/Cargo.toml engine` and full `cargo test --manifest-path indexer/Cargo.toml`.
+- [x] **Step 5: Commit** — committed as `Feat: add payment dispatch engine`.
 
 ---
 
@@ -345,7 +431,7 @@ impl SeenTxids {
 
 **Files:** Modify `week7/drop/indexer/src/engine.rs`; Test: same file (mock `Catalog` + `Bucket`).
 
-- [ ] **Step 1: Write the failing test** — a valid payment publishes exactly one blob; an underpayment publishes none.
+- [x] **Step 1: Write the test** — a valid payment publishes exactly one blob; an underpayment publishes none.
 
 ```rust
 #[tokio::test]
@@ -364,8 +450,8 @@ async fn valid_payment_publishes_one_blob_underpay_none() {
 }
 ```
 
-- [ ] **Step 2: Run `cargo test -p drop-indexer engine::tests::valid_payment`** — Expected: FAIL.
-- [ ] **Step 3: Implement**
+- [ ] **Step 2: Run `cargo test -p drop-indexer engine::tests::valid_payment`** — fail-first run skipped; implemented directly in this session.
+- [x] **Step 3: Implement**
 
 ```rust
 use crate::{Catalog, Bucket};
@@ -390,8 +476,8 @@ impl<C: Catalog, B: Bucket> Engine<C, B> {
 }
 ```
 
-- [ ] **Step 4: Run the test** — Expected: PASS.
-- [ ] **Step 5: Commit** — `git commit -m "feat(drop-indexer): dispatch engine (check→wrap→publish)"`
+- [x] **Step 4: Run the test** — PASS via `cargo test --manifest-path indexer/Cargo.toml engine` and full `cargo test --manifest-path indexer/Cargo.toml`.
+- [x] **Step 5: Commit** — committed as `Feat: add payment dispatch engine`.
 
 ---
 
