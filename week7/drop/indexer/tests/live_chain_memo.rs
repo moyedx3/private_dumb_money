@@ -27,8 +27,7 @@
 
 use anyhow::{anyhow, Context, Result};
 use drop_indexer::detect::{
-    detect_incoming, display_memo_bytes, display_txid_to_lightwalletd_bytes,
-    infer_network_from_ufvk,
+    detect_incoming, display_txid_to_lightwalletd_bytes, infer_network_from_ufvk,
 };
 use drop_indexer::lightwalletd::{GrpcClient, LightwalletdClient};
 use drop_indexer::memo::decode_memo;
@@ -121,10 +120,11 @@ async fn decodes_existing_chain_payment_memo() -> Result<()> {
 
     let mut decoded = Vec::new();
     for note in &notes {
-        if let Some(memo) = display_memo_bytes(&note.memo) {
-            if let Some((drop_id, e_pub)) = decode_memo(memo) {
-                decoded.push((drop_id, e_pub));
-            }
+        if note.memo.first() == Some(&0xF6) {
+            continue;
+        }
+        if let Some((drop_id, e_pub)) = decode_memo(&note.memo) {
+            decoded.push((drop_id, e_pub));
         }
     }
 

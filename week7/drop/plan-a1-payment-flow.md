@@ -12,7 +12,7 @@
 
 ## Current implementation status (2026-06-21)
 
-Overall plan completion: **about 55–60%**. The chain-query, UFVK detection, memo codec, dispatch wrapping, replay guard, and payment engine foundations are working; scan-loop and live smoke remain pending.
+Overall plan completion: **about 65–70%**. The chain-query, UFVK detection, memo codec, dispatch wrapping, replay guard, payment engine, and scan-loop wiring foundations are working; live smoke and encrypted cursor/replay persistence remain pending.
 
 | Plan task | Current state | Evidence / files |
 | --- | --- | --- |
@@ -24,7 +24,7 @@ Overall plan completion: **about 55–60%**. The chain-query, UFVK detection, me
 | Task 4 — sealed-box dispatch | **Implemented and unit-tested** | `indexer/src/dispatch.rs`; `wrap_k_drop` returns 80-byte libsodium sealed box, buyer-open test passes, `blob_key` returns deterministic blake2b-256 hex. |
 | Task 5 — replay guard | **Implemented and unit-tested** | `indexer/src/engine.rs`; `SeenTxids::first_time` rejects duplicate txids. Demo scope is in-memory; production persistence remains open. |
 | Task 6 — payment engine | **Implemented and unit-tested** | `indexer/src/engine.rs`; `Engine::on_note` does replay check, catalog lookup, underpay skip, sealed-box wrap, opaque key derivation, and `Bucket::put`. Tests cover valid payment, underpay, duplicate txid, and unknown drop. |
-| Task 7 — scan loop | **Not started** | `indexer/src/scan_loop.rs` missing. |
+| Task 7 — scan loop | **Implemented and unit-tested** | `indexer/src/scan_loop.rs`; `scan_once` fetches compact txids/full txs and wires `detect_incoming` → `decode_memo` → `Engine::on_note`. Unit tests cover compact→full fetch plumbing, `A1B64` memo dispatch, no-memo skip, and undecodable memo skip. Full raw-tx fixture E2E remains pending. |
 | Task 8 — live smoke binary | **Not started** | `indexer/src/bin/scan-live.rs` missing. |
 
 ### Current runnable commands
@@ -74,6 +74,20 @@ cargo test --manifest-path indexer/Cargo.toml detect::tests
 cargo test --manifest-path indexer/Cargo.toml zecscope_adapter
 cargo test --manifest-path indexer/Cargo.toml
 ```
+
+
+## Immediate next step note (2026-06-23)
+
+Current scan-loop implementation target is now complete at the library/unit-test layer: `scan_once` connects the completed pieces in `scan_loop.rs`. The scanner should read a new or explicitly supplied block range, fetch each full transaction, decrypt incoming notes with the creator UFVK, decode memo (`raw40` or `A1B64:`), validate price through `Engine::on_note`, wrap `K_drop` for the buyer `e_pub`, and register the dispatch blob via `Bucket::put`.
+
+Priority order:
+1. ✅ Implement `scan_loop.rs` with `scan_once(client, ufvk, network, start, end, engine)`.
+2. Implement `scan-live.rs` as a live smoke CLI. Default can inspect the latest block, but payment verification should accept `A1_SCAN_START/A1_SCAN_END` for historical ranges.
+3. Add cursor/replay persistence for TEE operation: `last_scanned_height` and processed txids. Because this runs in TEE with disk/volume state, persisted state should be encrypted. Start with a `ScanState` trait and memory implementation, then add an encrypted file implementation using a TEE/KMS-derived key.
+
+Operational distinction:
+- Development/live smoke: manual range scanning is acceptable.
+- Real TEE scanner: cursor-based incremental scanning plus encrypted replay state is required to avoid rescanning and duplicate dispatch after restart.
 
 ---
 
@@ -499,7 +513,7 @@ impl<C: Catalog, B: Bucket> Engine<C, B> {
 
 **Files:** Create `week7/drop/indexer/src/scan_loop.rs`; Test: same file (mock `LightwalletdClient`, reuse the scanner's mock pattern).
 
-- [ ] **Step 1: Write the failing test** — given a compact block referencing one txid and a canned full tx (the spike12 fixture), the loop drives the engine to publish one blob.
+- [x] **Step 1: Write the tests** — current tests cover compact block → full tx fetch plumbing and memo→engine dispatch wiring. A canned raw tx fixture test remains a follow-up.
 
 ```rust
 #[tokio::test]
@@ -513,8 +527,8 @@ async fn loop_detects_and_dispatches() {
 }
 ```
 
-- [ ] **Step 2: Run `cargo test -p drop-indexer scan_loop`** — Expected: FAIL.
-- [ ] **Step 3: Implement** — `scan_once`: `fetch_block_range(start,end)` → for each `vtx.txid` → `fetch_transaction` → `detect_incoming` → for each note `decode_memo` → `engine.on_note`. (Then `run_loop` wraps `scan_once` from a cursor to tip on an interval.)
+- [ ] **Step 2: Run `cargo test -p drop-indexer scan_loop`** — fail-first run skipped; implemented directly in this session.
+- [x] **Step 3: Implement** — `scan_once`: `fetch_block_range(start,end)` → for each `vtx.txid` → `fetch_transaction` → `detect_incoming` → for each note `decode_memo` → `engine.on_note`. (Then `run_loop` wraps `scan_once` from a cursor to tip on an interval.)
 
 ```rust
 pub async fn scan_once<C: LightwalletdClient, K: Catalog, B: Bucket>(
@@ -536,8 +550,8 @@ pub async fn scan_once<C: LightwalletdClient, K: Catalog, B: Bucket>(
 }
 ```
 
-- [ ] **Step 4: Run the test** — Expected: PASS (full chain: compact → full tx → IVK detect → memo → wrap → publish).
-- [ ] **Step 5: Commit** — `git commit -m "feat(drop-indexer): scan loop wiring (end-to-end with mocks)"`
+- [x] **Step 4: Run the test** — PASS via `cargo test --manifest-path indexer/Cargo.toml scan_loop`. Full raw-tx fixture E2E remains pending.
+- [ ] **Step 5: Commit** — pending; current `scan_loop.rs` changes are uncommitted.
 
 ---
 

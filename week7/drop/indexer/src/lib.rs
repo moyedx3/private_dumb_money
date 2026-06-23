@@ -3,6 +3,7 @@ pub mod dispatch;
 pub mod engine;
 pub mod lightwalletd;
 pub mod memo;
+pub mod scan_loop;
 pub mod zecscope_adapter;
 
 /// Drop configuration owned by Lane A2/catalog provisioning.
