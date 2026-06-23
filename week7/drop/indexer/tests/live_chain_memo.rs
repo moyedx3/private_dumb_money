@@ -130,7 +130,7 @@ async fn decodes_existing_chain_payment_memo() -> Result<()> {
 
     assert!(
         !decoded.is_empty(),
-        "no decrypted note had an A1 40-byte drop_id||e_pub memo"
+        "no decrypted note had an A1 raw 40-byte or A1B64 text drop_id||e_pub memo"
     );
     assert!(
         decoded

@@ -17,7 +17,7 @@ Overall plan completion: **about 55–60%**. The chain-query, UFVK detection, me
 | Plan task | Current state | Evidence / files |
 | --- | --- | --- |
 | Task 0 — scaffold + lightwalletd | **Implemented** | `indexer/Cargo.toml`, `indexer/build.rs`, `indexer/proto/*`, `indexer/src/lightwalletd.rs`, `indexer/src/bin/check-lightwalletd.rs`, `indexer/src/lib.rs`; live `check-lightwalletd` can fetch tip/ranges/raw tx bytes. `DropConfig`, `Catalog`, `Bucket` boundaries are now in `lib.rs`. |
-| Task 1 — memo codec | **Implemented and unit-tested** | `indexer/src/memo.rs`; `encode_memo` / `decode_memo` cover 40-byte `drop_id || e_pub`, wrong-length reject, and trailing ZIP-302 zero padding. Added ignored live integration test `indexer/tests/live_chain_memo.rs` for an already-mined memo tx. |
+| Task 1 — memo codec | **Implemented and unit-tested** | `indexer/src/memo.rs`; `encode_memo` / `decode_memo` cover raw 40-byte `drop_id || e_pub`, `A1B64:<base64url(raw40)>` wallet-text fallback, wrong-length reject, and trailing ZIP-302 zero padding. Added ignored live integration test `indexer/tests/live_chain_memo.rs` for an already-mined memo tx. |
 | Task 2 — branch-tolerant tx reader | **Implemented and unit-tested** | `indexer/src/detect.rs`; tests cover NU5 branch-id patch and txid byte-order helpers. |
 | Task 3 — IVK incoming detector | **Implemented enough for live UFVK detection; golden fixture still missing** | `detect_incoming` handles Sapling/Orchard and now scans both external + internal scopes. `probe-ufvk` live run found Orchard note at height `3363067`, value `74999`, memo `<none>`. Pending: hermetic spike fixture test. |
 | Extra — zecscope compact scan smoke | **Implemented** | `indexer/src/zecscope_adapter.rs`, `indexer/src/bin/zecscope-scan.rs`; live run found the same Orchard candidate from compact blocks. This is a fast candidate-detection helper, not a memo path. |
@@ -197,8 +197,22 @@ pub fn decode_memo(memo: &[u8]) -> Option<(u64, [u8; 32])> {
 }
 ```
 
-- [x] **Step 4: Run `cargo test -p drop-indexer memo`** — PASS via `cargo test --manifest-path indexer/Cargo.toml memo`. Also added `cargo test --manifest-path indexer/Cargo.toml --test live_chain_memo` (ignored by default) for existing chain memo fixtures.
+- [x] **Step 4: Run `cargo test -p drop-indexer memo`** — PASS via `cargo test --manifest-path indexer/Cargo.toml memo`. Covers raw 40B memo and `A1B64:<base64url(raw40)>` text fallback. Also added `cargo test --manifest-path indexer/Cargo.toml --test live_chain_memo` (ignored by default) for existing chain memo fixtures.
 - [x] **Step 5: Commit** — committed as `Feat: add UFVK memo scanner`.
+
+#### Wallet text memo fallback
+
+Some wallets expose only a UTF-8 memo field and cannot write arbitrary raw memo bytes. A1 therefore also accepts this text form while keeping the raw I1 format as canonical:
+
+```text
+A1B64:<base64url_no_pad(drop_id(8B BE) || e_pub(32B))>
+```
+
+Current test value for `drop_id=1` and `e_pub=000102...1f`:
+
+```text
+A1B64:AAAAAAAAAAEAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHw
+```
 
 ---
 
