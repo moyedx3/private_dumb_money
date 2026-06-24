@@ -11,6 +11,7 @@ use crate::detect::detect_incoming;
 use crate::engine::{Engine, Note, PaymentDispatch};
 use crate::lightwalletd::LightwalletdClient;
 use crate::memo::decode_memo;
+use crate::state::ScanState;
 use crate::{Bucket, Catalog};
 
 /// Counters and dispatch metadata produced by one range scan.
@@ -98,6 +99,81 @@ where
     Ok(summary)
 }
 
+/// Scan an inclusive block range once, using persistent state for replay
+/// suppression and cursor advancement.
+///
+/// `state` is consulted before full transaction fetches. A txid is marked seen
+/// only after this pass produces at least one dispatch for it; the block cursor
+/// is advanced only after the full range completes without error.
+pub async fn scan_once_with_state<C, K, B, S>(
+    client: &C,
+    ufvk: &str,
+    network: &Network,
+    start: u64,
+    end: u64,
+    state: &mut S,
+    engine: &mut Engine<K, B>,
+) -> Result<ScanSummary>
+where
+    C: LightwalletdClient + ?Sized,
+    K: Catalog,
+    B: Bucket,
+    S: ScanState,
+{
+    if start > end {
+        return Err(anyhow!(
+            "scan start height {start} is greater than end height {end}"
+        ));
+    }
+
+    let blocks = client
+        .fetch_block_range(start, end)
+        .await
+        .with_context(|| format!("fetch compact block range {start}..={end}"))?;
+
+    let mut summary = ScanSummary {
+        blocks_fetched: blocks.len(),
+        ..ScanSummary::default()
+    };
+    let mut max_height = None;
+
+    for block in blocks {
+        max_height = Some(max_height.map_or(block.height, |h: u64| h.max(block.height)));
+
+        for compact_tx in &block.vtx {
+            summary.compact_txs += 1;
+
+            let txid: [u8; 32] =
+                compact_tx.txid.as_slice().try_into().map_err(|_| {
+                    anyhow!("compact txid at height {} is not 32 bytes", block.height)
+                })?;
+            if state.has_seen_txid(&txid) {
+                continue;
+            }
+
+            let raw_tx = client
+                .fetch_transaction(&txid)
+                .await
+                .with_context(|| format!("fetch full tx {}", hex::encode(txid)))?;
+            summary.full_txs_fetched += 1;
+            if raw_tx.is_empty() {
+                continue;
+            }
+
+            let incoming = detect_incoming(ufvk, &raw_tx, network, block.height as u32)
+                .with_context(|| format!("decrypt full tx at height {}", block.height))?;
+            let per_tx = process_incoming_notes_with_state(&txid, incoming, state, engine).await?;
+            summary.merge(per_tx);
+        }
+    }
+
+    if let Some(height) = max_height {
+        state.set_last_scanned_height(height);
+    }
+
+    Ok(summary)
+}
+
 /// Convert detected incoming notes into engine notes and publish dispatches.
 ///
 /// This is separate from `scan_once` so memo/engine wiring can be unit-tested
@@ -144,6 +220,29 @@ where
     Ok(summary)
 }
 
+/// State-aware note processing used by persistent scanner loops.
+pub async fn process_incoming_notes_with_state<K, B, S>(
+    txid: &[u8; 32],
+    notes: impl IntoIterator<Item = crate::detect::IncomingNote>,
+    state: &mut S,
+    engine: &mut Engine<K, B>,
+) -> Result<ScanSummary>
+where
+    K: Catalog,
+    B: Bucket,
+    S: ScanState,
+{
+    if state.has_seen_txid(txid) {
+        return Ok(ScanSummary::default());
+    }
+
+    let summary = process_incoming_notes(txid, notes, engine).await?;
+    if !summary.dispatches.is_empty() {
+        state.mark_seen_txid(*txid);
+    }
+    Ok(summary)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -152,6 +251,7 @@ mod tests {
     use crate::lightwalletd::proto::compact::{CompactBlock, CompactTx};
     use crate::lightwalletd::tests::MockClient;
     use crate::memo::encode_text_memo;
+    use crate::state::{MemoryScanState, ScanState};
     use crate::DropConfig;
     use std::sync::{Arc, Mutex};
 
@@ -303,5 +403,82 @@ mod tests {
         assert_eq!(summary.compact_txs, 1);
         assert_eq!(summary.full_txs_fetched, 1);
         assert_eq!(summary.incoming_notes, 0);
+    }
+
+    #[tokio::test]
+    async fn state_aware_scan_skips_already_seen_txids_and_advances_cursor() {
+        let txid = [4u8; 32];
+        let client = MockClient::new(
+            50,
+            vec![CompactBlock {
+                height: 50,
+                vtx: vec![CompactTx {
+                    txid: txid.to_vec(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }],
+        );
+        let mut state = MemoryScanState::new();
+        state.mark_seen_txid(txid);
+        let mut engine = engine_with_bucket(MockBucket::default());
+
+        let summary = scan_once_with_state(
+            &client,
+            "uview1dummy-not-used-for-skipped-tx",
+            &Network::MainNetwork,
+            50,
+            50,
+            &mut state,
+            &mut engine,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(summary.blocks_fetched, 1);
+        assert_eq!(summary.compact_txs, 1);
+        assert_eq!(summary.full_txs_fetched, 0);
+        assert_eq!(state.last_scanned_height(), Some(50));
+    }
+
+    #[tokio::test]
+    async fn state_aware_note_processing_marks_dispatched_txid() {
+        let bucket = MockBucket::default();
+        let mut engine = engine_with_bucket(bucket);
+        let mut state = MemoryScanState::new();
+        let e_pub: [u8; 32] = core::array::from_fn(|i| i as u8);
+        let txid = [5u8; 32];
+
+        let summary = process_incoming_notes_with_state(
+            &txid,
+            [IncomingNote {
+                pool: ShieldedPool::Orchard,
+                value_zat: 10_000,
+                memo: encode_text_memo(1, &e_pub).into_bytes(),
+            }],
+            &mut state,
+            &mut engine,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(summary.dispatches.len(), 1);
+        assert!(state.has_seen_txid(&txid));
+
+        let duplicate = process_incoming_notes_with_state(
+            &txid,
+            [IncomingNote {
+                pool: ShieldedPool::Orchard,
+                value_zat: 10_000,
+                memo: encode_text_memo(1, &e_pub).into_bytes(),
+            }],
+            &mut state,
+            &mut engine,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(duplicate.incoming_notes, 0);
+        assert_eq!(duplicate.dispatches.len(), 0);
     }
 }
