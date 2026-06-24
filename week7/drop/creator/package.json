@@ -6,17 +6,23 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "qa:http-smoke": "node scripts/http-smoke.mjs",
+    "qa:lane-c": "npm test && npm run build && npm run test:browser -- --project=chromium && node scripts/check-secret-sinks.mjs && npm run qa:http-smoke"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "ky": "^2.0.2",
     "libsodium-wrappers": "^0.7.15",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "typescript": "^5.7.2",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.0",
     "@types/libsodium-wrappers": "^0.7.14",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",

@@ -1,5 +1,6 @@
 import sodium from "libsodium-wrappers";
-import { toHex, utf8Bytes } from "./bytes";
+import { fromHex, toHex, utf8Bytes } from "./bytes";
+import { parseSha256Hex } from "./content";
 
 export type ProvisionPayload = {
   drop_id: number;
@@ -8,6 +9,26 @@ export type ProvisionPayload = {
   creator_ufvk: string;
   h_content: string;
 };
+
+export function parseDropId(input: string): number {
+  const trimmed = input.trim();
+  if (!/^(0|[1-9]\d*)$/.test(trimmed)) {
+    throw new Error("drop_id must be a non-negative integer");
+  }
+  const dropId = Number(trimmed);
+  if (!Number.isSafeInteger(dropId)) {
+    throw new Error("drop_id exceeds JavaScript safe integer range");
+  }
+  return dropId;
+}
+
+export function parseProvisioningPubkey(input: string): Uint8Array {
+  const trimmed = input.trim();
+  if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    throw new Error("provisioning_pubkey must be exactly 32 bytes as hex");
+  }
+  return fromHex(trimmed);
+}
 
 export function buildProvisionPayload(args: {
   dropId: number;
@@ -28,15 +49,13 @@ export function buildProvisionPayload(args: {
   if (!args.creatorUfvk.trim()) {
     throw new Error("creator_ufvk is required");
   }
-  if (!/^[0-9a-f]{64}$/i.test(args.hContent)) {
-    throw new Error("h_content must be a sha256 hex string");
-  }
+  const hContent = parseSha256Hex(args.hContent);
   return {
     drop_id: args.dropId,
     price_zat: args.priceZat,
     k_drop: toHex(args.kDrop),
     creator_ufvk: args.creatorUfvk.trim(),
-    h_content: args.hContent.toLowerCase()
+    h_content: hContent
   };
 }
 

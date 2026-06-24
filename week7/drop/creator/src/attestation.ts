@@ -13,6 +13,10 @@ export type QuoteVerification = {
 };
 
 export type QuoteVerifier = (attestation: AttestResponse) => Promise<QuoteVerification>;
+type VerifierFunction = (quoteHex: string) => Promise<unknown> | unknown;
+type VerifierLoadResult =
+  | { readonly kind: "loaded"; readonly verify: VerifierFunction }
+  | { readonly kind: "failed"; readonly error: string };
 
 declare global {
   interface Window {
@@ -36,6 +40,7 @@ export async function verifyAttestationOrThrow(
   if (pubkey.length !== 32) {
     throw new Error("attestation provisioning_pubkey_hex must be 32 bytes");
   }
+  const expectedMeasurement = normalizeExpectedMeasurement(expectedMeasurementHex);
   const verification = await verifier(attestation);
   if (!verification.ok) {
     throw new Error(`quote verification failed: ${verification.error ?? "unknown error"}`);
@@ -43,7 +48,7 @@ export async function verifyAttestationOrThrow(
   if (!verification.codeMeasurement) {
     throw new Error("quote verifier did not return a code measurement");
   }
-  if (verification.codeMeasurement.toLowerCase() !== expectedMeasurementHex.trim().toLowerCase()) {
+  if (verification.codeMeasurement !== expectedMeasurement) {
     throw new Error("quote measurement does not match the pinned expected measurement");
   }
   if (!verification.reportData) {
@@ -58,63 +63,136 @@ export async function verifyAttestationOrThrow(
 
 export async function verifyQuoteWithBrowserQvl(attestation: AttestResponse): Promise<QuoteVerification> {
   try {
-    const globalVerifier = typeof window !== "undefined" ? window.dropQuoteVerifier : undefined;
-    const mod =
-      globalVerifier ??
-      (await (new Function("specifier", "return import(specifier)") as (
-        specifier: string
-      ) => Promise<Record<string, unknown>>)(
-        import.meta.env.VITE_DROP_QVL_MODULE_URL ?? "@phala/dcap-qvl-web"
-      ));
-    const verifierModule = mod as Record<string, unknown>;
-    const candidates = [
-      verifierModule.verifyQuote,
-      verifierModule.verify,
-      (verifierModule.default as Record<string, unknown> | undefined)?.verifyQuote,
-      (verifierModule.default as Record<string, unknown> | undefined)?.verify
-    ].filter((fn): fn is (...args: unknown[]) => Promise<unknown> | unknown => typeof fn === "function");
-    if (candidates.length === 0) {
-      return { ok: false, error: "@phala/dcap-qvl-web did not expose verifyQuote/verify" };
+    const verifier = await loadVerifierFunction();
+    if (verifier.kind === "failed") {
+      return { ok: false, error: verifier.error };
     }
-    const raw = await candidates[0](attestation.quote_hex);
+    const raw = await verifier.verify(attestation.quote_hex);
     return normalizeQvlResult(raw);
   } catch (error) {
     return {
       ok: false,
       error:
         error instanceof Error
-          ? `${error.message}. Provide @phala/dcap-qvl-web through VITE_DROP_QVL_MODULE_URL or window.dropQuoteVerifier.`
+          ? `${error.message}. Provide VITE_DROP_QVL_MODULE_URL or window.dropQuoteVerifier.`
           : String(error)
     };
   }
 }
 
 function normalizeQvlResult(raw: unknown): QuoteVerification {
-  if (!raw || typeof raw !== "object") {
+  if (!isObject(raw)) {
     return { ok: false, error: "verifier returned a non-object result" };
   }
-  const obj = raw as Record<string, unknown>;
-  const ok = obj.ok === true || obj.is_valid === true || obj.valid === true || obj.status === "ok";
+
+  const ok = truthyField(raw, "ok") || truthyField(raw, "is_valid") || truthyField(raw, "valid") || okStatus(raw);
   const codeMeasurement =
-    stringField(obj, "codeMeasurement") ??
-    stringField(obj, "code_measurement") ??
-    stringField(obj, "mr_td") ??
-    stringField(obj, "mrtd") ??
-    stringField(obj, "rtmr3");
+    hexField(raw, "codeMeasurement") ??
+    hexField(raw, "code_measurement") ??
+    hexField(raw, "mr_td") ??
+    hexField(raw, "mrtd") ??
+    hexField(raw, "rtmr3");
   const reportData =
-    stringField(obj, "reportData") ??
-    stringField(obj, "report_data") ??
-    stringField(obj, "reportdata") ??
-    stringField(obj, "user_data");
+    hexField(raw, "reportData") ??
+    hexField(raw, "report_data") ??
+    hexField(raw, "reportdata") ??
+    hexField(raw, "user_data");
+
+  if (!ok) {
+    return { ok: false, error: stringField(raw, "error") ?? stringField(raw, "message") ?? "quote verification failed" };
+  }
+  if (!codeMeasurement) {
+    return { ok: false, error: "quote verifier did not return a code measurement" };
+  }
+  if (!reportData) {
+    return { ok: false, error: "quote verifier did not return report_data" };
+  }
+
   return {
-    ok,
-    codeMeasurement: codeMeasurement?.replace(/^0x/, ""),
-    reportData: reportData?.replace(/^0x/, ""),
-    error: ok ? undefined : stringField(obj, "error") ?? stringField(obj, "message") ?? "quote verification failed"
+    ok: true,
+    codeMeasurement,
+    reportData
   };
 }
 
-function stringField(obj: Record<string, unknown>, key: string): string | undefined {
-  const value = obj[key];
+async function loadVerifierFunction(): Promise<VerifierLoadResult> {
+  const browserVerifier = typeof window !== "undefined" ? window.dropQuoteVerifier : undefined;
+  const mod = browserVerifier ?? (await explicitQvlModule());
+  const direct = verifierFunction(mod);
+  if (direct) {
+    return { kind: "loaded", verify: direct };
+  }
+  const nested = verifierFunction(objectField(mod, "default"));
+  if (nested) {
+    return { kind: "loaded", verify: nested };
+  }
+  return { kind: "failed", error: "quote verifier module did not expose verifyQuote/verify" };
+}
+
+function importQvlModule(specifier: string): Promise<unknown> {
+  return import(/* @vite-ignore */ specifier);
+}
+
+async function explicitQvlModule(): Promise<unknown> {
+  const specifier = import.meta.env.VITE_DROP_QVL_MODULE_URL?.trim();
+  if (!specifier) {
+    throw new Error("quote verifier setup requires VITE_DROP_QVL_MODULE_URL or window.dropQuoteVerifier");
+  }
+  return importQvlModule(specifier);
+}
+
+function verifierFunction(value: unknown): VerifierFunction | undefined {
+  return functionField(value, "verifyQuote") ?? functionField(value, "verify");
+}
+
+function normalizeExpectedMeasurement(input: string): string {
+  const normalized = normalizeHex(input);
+  if (!normalized || normalized.length < 64) {
+    throw new Error("expected measurement hex must be at least 64 hex characters");
+  }
+  return normalized;
+}
+
+function normalizeHex(input: string): string | undefined {
+  const normalized = input.trim().replace(/^0x/i, "").toLowerCase();
+  return /^[0-9a-f]+$/.test(normalized) ? normalized : undefined;
+}
+
+function hexField(obj: object, key: string): string | undefined {
+  const value = stringField(obj, key);
+  return value ? normalizeHex(value) : undefined;
+}
+
+function stringField(obj: object, key: string): string | undefined {
+  const value = Reflect.get(obj, key);
   return typeof value === "string" ? value : undefined;
+}
+
+function objectField(obj: unknown, key: string): object | undefined {
+  if (!isObject(obj)) {
+    return undefined;
+  }
+  const value = Reflect.get(obj, key);
+  return isObject(value) ? value : undefined;
+}
+
+function functionField(obj: unknown, key: string): VerifierFunction | undefined {
+  if (!isObject(obj)) {
+    return undefined;
+  }
+  const value = Reflect.get(obj, key);
+  return typeof value === "function" ? value : undefined;
+}
+
+function truthyField(obj: object, key: string): boolean {
+  return Reflect.get(obj, key) === true;
+}
+
+function okStatus(obj: object): boolean {
+  const status = stringField(obj, "status")?.toLowerCase();
+  return status === "ok" || status === "valid" || status === "success" || status === "passed";
+}
+
+function isObject(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
 }

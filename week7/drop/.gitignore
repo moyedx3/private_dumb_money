@@ -1,0 +1,4 @@
+# Local agent artifacts
+/.omo/
+/creator/.omo/
+/.codegraph

@@ -6,6 +6,14 @@ export type EncryptedContent = {
   kDrop: Uint8Array;
 };
 
+export function parseSha256Hex(input: string): string {
+  const trimmed = input.trim();
+  if (!/^[0-9a-fA-F]{64}$/.test(trimmed)) {
+    throw new Error("sha256 hex must be exactly 64 hex characters");
+  }
+  return trimmed.toLowerCase();
+}
+
 export async function encryptContent(plaintext: Uint8Array): Promise<EncryptedContent> {
   const kDrop = crypto.getRandomValues(new Uint8Array(32));
   const nonce = crypto.getRandomValues(new Uint8Array(12));

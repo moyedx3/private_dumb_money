@@ -13,4 +13,8 @@ describe("priceZecToZatNumber", () => {
       expect(() => priceZecToZatNumber(bad)).toThrow();
     }
   });
+
+  it("rejects values above the safe-integer zatoshi limit", () => {
+    expect(() => priceZecToZatNumber("90071992.54740992")).toThrow("safe integer");
+  });
 });
