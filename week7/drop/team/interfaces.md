@@ -10,7 +10,11 @@
 
 ## I1. 메모 (구매자 → 서버) — A1 소유
 
-구매자가 결제에 실어 보내는 40바이트 쪽지. 체인 위 Zcash 메모 필드에 **날 바이트(raw)** 로 들어간다.
+구매자가 결제에 실어 보내는 쪽지. A1은 아래 **두 형식 모두** 디코드한다.
+
+### I1-a. Raw 형식
+
+체인 위 Zcash 메모 필드에 40바이트 날 바이트(raw)로 들어간다.
 
 ```
 memo[0..8]   = drop_id   (u64, big-endian)      // 어떤 드롭을 사는지
@@ -18,8 +22,53 @@ memo[8..40]  = e_pub      (X25519 공개키, 32바이트) // 구매자 일회용
 총 40바이트  (Zcash 메모는 512바이트라 여유 충분)
 ```
 
-- **ZIP-321 URI의 `memo=` 파라미터** = 위 40바이트를 **base64url(패딩 없음)** 한 문자열. (구매자 앱 B가 인코딩, Zashi가 디코드해서 체인에 raw로 넣음.)
-- 서버 A1은 메모 raw 40바이트를 읽어 `drop_id` / `e_pub`로 쪼갠다.
+### I1-b. 텍스트 폴백 형식
+
+raw binary memo 입력이 어려운 지갑을 위해 UTF-8 텍스트 memo도 허용한다.
+
+```
+"A1B64:" + base64url_no_pad(drop_id(8B BE) || e_pub(32B))
+```
+
+prefix는 고정값이다.
+
+```
+A1B64:
+```
+
+### ZIP-321 wrapping
+
+ZIP-321 URI의 `memo=` 파라미터는 **온체인 memo bytes**를 base64url-no-pad로 감싼 값이다.
+
+```
+raw형:
+  온체인 memo bytes = drop_id(8B BE) || e_pub(32B)
+  ZIP-321 memo=     = base64url_no_pad(raw40)
+
+텍스트 폴백형:
+  온체인 memo bytes = utf8("A1B64:" + base64url_no_pad(raw40))
+  ZIP-321 memo=     = base64url_no_pad(utf8("A1B64:..."))
+```
+
+### 기본형식
+
+- A1은 raw형과 텍스트 폴백형을 모두 받아야 한다.
+- B는 wallet이 raw 40B memo를 byte-identical하게 실을 수 있으면 raw형을 기본으로 쓴다.
+- wallet이 raw binary memo를 거부하거나 변형하면 텍스트 폴백형 `A1B64:`를 기본으로 쓴다.
+- 데모에서는 wallet 호환성을 위해 `A1B64:`를 우선 사용할 수 있다.
+
+### 교차구현 test vector
+
+B의 encoder와 A1의 decoder가 같은 바이트를 보는지 확인하기 위한 고정 벡터다.
+
+```
+drop_id = 1
+e_pub   = 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+raw40   = 0000000000000001000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+text    = A1B64:AAAAAAAAAAEAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHw
+```
+
+서버 A1은 raw형이면 첫 40바이트를, 텍스트 폴백형이면 `A1B64:` 뒤 base64url payload를 디코드해 `drop_id` / `e_pub`로 쪼갠다.
 
 ## I2. dispatch blob (서버 → 구매자) — A1 소유
 
@@ -39,7 +88,7 @@ blob = crypto_box_seal(K_drop, e_pub)
 
 **(a) 공개 카탈로그 엔트리** (구매자 B가 목록에서 봄, JSON):
 ```json
-{ "drop_id": 1, "price_zec": "0.01", "h_content": "<콘텐츠 blob 버킷 키>", "title": "고양이 사진" }
+{ "drop_id": 1, "price_zec": "0.01", "h_content": "<콘텐츠 blob 버킷 키>", "title": "고양이 사진", "deposit_addr": "<shielded address>" }
 ```
 
 **(b) 내부 드롭 설정** (서버 enclave가 보관, A2가 저장 / A1이 조회 — 절대 공개 안 함):
@@ -48,8 +97,9 @@ drop_id     : u64
 price_zat   : u64            // zatoshi (1 ZEC = 100,000,000 zat)
 k_drop      : [u8; 32]       // 콘텐츠 마스터 열쇠
 creator_ufvk: String         // 크리에이터 보기전용키(UFVK 문자열, IVK 추출용)
+deposit_addr: String         // 구매자가 입금할 shielded address (t1/t3 금지)
 ```
-A1이 쓰는 조회 인터페이스: `Catalog::lookup(drop_id) -> Option<DropConfig{price_zat, k_drop, creator_ufvk}>`
+A1이 쓰는 조회 인터페이스: `Catalog::lookup(drop_id) -> Option<DropConfig{price_zat, k_drop, creator_ufvk, deposit_addr}>`
 
 ## I4. 콘텐츠 blob (크리에이터 → 구매자, 버킷 경유) — C 소유
 
@@ -69,7 +119,7 @@ h_content = sha256(blob) 의 hex    // 버킷 키이자 카탈로그의 h_conten
 1. C가 `/attest`로 서버 공개키 받고 quote 검증(I6).
 2. C가 그 공개키로 sealed box 만들어 전송:
    ```
-   payload = { drop_id, price_zat, k_drop(32B), creator_ufvk, h_content }   // CBOR/JSON
+   payload = { drop_id, price_zat, k_drop(32B), creator_ufvk, deposit_addr, h_content }   // CBOR/JSON
    sealed  = crypto_box_seal(payload, enclave_provisioning_pubkey)
    POST /provision   body: sealed
    ```
