@@ -1,20 +1,21 @@
 # 레인 B → A1·A2 요청서
 
 > **보낸이**: 레인 B(구매자 웹앱). **받는이**: A1(결제엔진, `origin/a1`), A2(enclave 플랫폼, `master`).
-> **맥락**: B 구현 착수 전 코드 점검 결과, B가 의존하는 접점 4곳이 비어 있거나 계약문서(`interfaces.md`)에 없음. 아래 4개를 닫아주면 B의 결제 URL 생성·폴링·언락 경로가 production으로 열린다.
-> **B가 자기 쪽에서 처리하는 것**(요청 아님): `e_priv↔drop_id↔h_content` 매핑(B5), memo 인코더, mock 픽스처, 콘텐츠 복호화. → 아래 4개만 상대 레인 의존.
+> **맥락**: B 구현 착수 전 코드 점검 결과, B가 의존하는 접점이 비어 있거나 계약문서(`interfaces.md`)에 없음. 아래 **R-A2-1~3**을 닫아주면 B의 결제 URL 생성·폴링·언락 경로가 production으로 열린다. **R-A2-4**는 기능 블로커가 아니라 **설계 정합성(프라이버시)** 항목 — 데모는 무관, 운용 전 필요.
+> **B가 자기 쪽에서 처리하는 것**(요청 아님): `e_priv↔drop_id↔h_content` 매핑(B5), memo 인코더, mock 픽스처, 콘텐츠 복호화.
 > **주의**: A1(`origin/a1`)과 A2(`master`)가 아직 미머지. 이 요청들은 **통합 빌드에 반영**되어야 B 최종 테스트가 가능.
 
 ---
 
 ## 한눈에
 
-| # | 받는이 | 요청 | 크기 | B에서 막히는 것 |
-|---|---|---|---|---|
-| **R-A2-1** | A2 | 버킷 **dispatch 목록(list) 엔드포인트** 추가 | 소 | M4 폴링(blob 못 훑음) |
-| **R-A2-2** | A2 | 카탈로그(I3-a)에 **`deposit_addr`** 추가 | 중 | M3 결제 URL(주소 없음) |
-| **R-A2-3** | A2 | **dispatch blob ↔ content blob 분리**(list에서) | 소 (R-A2-1과 동시) | 큰 content 헛다운로드 |
-| **R-A1-1** | A1 | **텍스트 memo 폴백(`A1B64:`)을 `interfaces.md` I1에 문서화** + 기본형식 결정 | 문서 (코드 거의 없음) | B가 memo 형식 못 맞춤 |
+| #          | 받는이 | 요청                                                           | 크기             | B에서 막히는 것        |
+| ---------- | --- | ------------------------------------------------------------ | -------------- | ---------------- |
+| **R-A2-1** | A2  | 버킷 **dispatch 목록(list) 엔드포인트** 추가                            | 소              | M4 폴링(blob 못 훑음) |
+| **R-A2-2** | A2  | 카탈로그(I3-a)에 **`deposit_addr`** 추가                            | 중              | M3 결제 URL(주소 없음) |
+| **R-A2-3** | A2  | **dispatch blob ↔ content blob 분리**(list에서)                  | 소 (R-A2-1과 동시) | 큰 content 헛다운로드  |
+| **R-A1-1** | A1  | **텍스트 memo 폴백(`A1B64:`)을 `interfaces.md` I1에 문서화** + 기본형식 결정 | 문서 (코드 거의 없음)  | B가 memo 형식 못 맞춤  |
+| **R-A2-4** | A2  | **공개 버킷을 인덱서(TEE 호스트)에서 분리** — buyer 읽기 surface를 TEE 아닌 별도 저장소로 | 운용 (데모 무관) | (기능 안 막힘) 프라이버시 정합성 |
 
 ---
 
@@ -134,6 +135,31 @@ prefix "A1B64:" — 고정(freeze).
 
 ---
 
+## R-A2-4 — 공개 버킷을 인덱서(TEE 호스트)에서 분리 (설계 정합성 · 프라이버시)
+
+**무엇.** buyer가 읽는 모든 것(카탈로그 · content blob · dispatch blob)을 **인덱서가 직접 서빙하지 말고**, buyer가 폴링하는 **별도 dumb 저장소**(S3/CloudFront · Blossom/NIP-96)에 둔다. TEE/인덱서·A1은 거기에 **쓰기(put)만**, buyer는 거기서 **읽기(get)만**.
+
+**왜 — 원래 설계와 다르다.**
+- 원래 설계: buyer는 **버킷만** 폴링하고 **TEE와 직접 통신하지 않는다**(oblivious "눈 가린 우체부" — project-scope §2, spec §7.3). dispatch를 버킷 경유로 하는 이유 *자체가* "buyer↔TEE 연결을 만들지 않아 TEE가 buyer를 못 보게" 하려는 것이다.
+- 현재 구현: 버킷 = 인덱서와 **같은 호스트**. `server.rs`가 `/catalog`·`/bucket/:key`·(R-A2-1 후)`/dispatch`를 전부 같은 axum 서버에서 서빙한다. → **buyer가 카탈로그를 받고 dispatch를 폴링할 때마다 TEE 호스트에 접속 → TEE 호스트가 buyer IP·폴링 패턴을 본다.**
+- 결과: "honest-but-curious 서버도 누가 뭘 샀는지 모른다"는 핵심 속성이 **네트워크 레이어에서 약화**된다. spec §7.3이 "buyer IP 상관"을 out-of-scope 한계로 적었는데, 버킷을 분리하면 *줄일 수 있던* 그 표면을 인덱서와 합치며 오히려 키운다(TEE가 polling IP를 직접 봄).
+
+**현재 B 구현 상태.** `buyer/src/api.ts`가 카탈로그·dispatch·content를 **단일 `indexerUrl`** 한 곳에서 읽는다(`App.tsx` 기본 `http://localhost:8080`). 즉 B의 읽기 surface 전체가 인덱서를 가리킨다 — 위 구현과 일치(데모용).
+
+**데모 vs 운용.**
+- **데모**: 인덱서가 버킷 겸함 OK(A2 §f "데모는 로컬파일/S3 중 단순한 쪽"). 당장 차단 아님.
+- **운용**: blob·카탈로그를 **enclave 호스트 밖**(CDN/Blossom)에 두고 buyer가 *그걸* 폴링. 인덱서/A1은 거기에 put만 → buyer 읽기 트래픽을 TEE가 안 본다.
+
+**제안.**
+- **A2(인프라)**: blob·카탈로그 저장을 외부 객체 저장소로. put 경로만 인덱서/A1 안. buyer 공개 읽기 URL = 그 저장소. (카탈로그는 R2 서명과 함께 두면 변조 방지까지.)
+- **B(config 분리, 소)**: buyer 읽기 base를 인덱서가 아니라 **버킷**으로. `VITE_DROP_BUCKET_URL`(카탈로그·content·dispatch 읽기) 도입. 데모는 인덱서와 같은 값, 운용 땐 CDN. (`api.ts` 작은 변경.)
+
+**완료 기준.** buyer의 카탈로그·dispatch·content 읽기가 **인덱서(TEE 호스트)가 아닌 별도 저장소**로 가고, 인덱서는 buyer 읽기 트래픽을 보지 않는다. (데모는 동일 호스트 허용하되 config로 분리 가능한 상태.)
+
+**크기.** 운용 인프라 변경(중) + B config 분리(소). **데모 차단 아님 — 설계 정합성/프라이버시 항목.**
+
+---
+
 ## 부록 — 근거 코드 위치
 
 | 항목 | 위치 (브랜치) |
@@ -145,5 +171,6 @@ prefix "A1B64:" — 고정(freeze).
 | `valid_key` hex-only | `bucket.rs:26-28` (master) |
 | memo 2형식·`A1B64:` | `memo.rs` `TEXT_MEMO_PREFIX`, `encode_text_memo`, `decode_memo` (origin/a1) |
 | dispatch blob(K_drop만, 80B, blake2b 키) | `dispatch.rs` `wrap_k_drop`, `blob_key` (origin/a1) |
+| 버킷=인덱서 동일 호스트(분리 안 됨) | `server.rs:48-58`(catalog·bucket·dispatch 동일 서버) · B `api.ts` 단일 `indexerUrl` |
 
 > 별개(이번 요청 아님, 인지용): 카탈로그가 in-memory라 재시작 시 전 drop 소실 → 재-provision 필요(`catalog.rs:9-13` 주석에 명시). 데모 범위로 수용, production은 영속 필요.
