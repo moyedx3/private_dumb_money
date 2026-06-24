@@ -22,6 +22,7 @@ impl Catalog for DemoCatalog {
             price_zat: self.price_zat,
             k_drop: self.k_drop,
             creator_ufvk: self.creator_ufvk.clone(),
+            deposit_addr: "u1demoaddress".to_string(),
         })
     }
 }

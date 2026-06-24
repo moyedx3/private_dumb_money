@@ -10,6 +10,8 @@ use anyhow::{anyhow, Result};
 use std::sync::{Arc, Mutex};
 
 pub const CREATOR_DROP_REGISTER_ENDPOINT: &str = "POST /api/creators/{creator_id}/drops";
+pub const PUBLIC_CATALOG_ENDPOINT: &str = "GET /api/catalog";
+pub const BUYER_DISPATCH_LIST_ENDPOINT: &str = "GET /api/buyers/dispatch";
 pub const BUYER_DISPATCH_LOOKUP_ENDPOINT: &str = "GET /api/buyers/dispatch/{bucket_key}";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,8 +32,18 @@ pub fn endpoint_vector() -> Vec<ApiEndpoint> {
         },
         ApiEndpoint {
             method: "GET",
+            path: "/api/catalog",
+            purpose: "Return public buyer catalog entries, including shielded deposit addresses but no secrets.",
+        },
+        ApiEndpoint {
+            method: "GET",
+            path: "/api/buyers/dispatch",
+            purpose: "List dispatch blob keys only, so buyers can trial-open dispatches without scanning content blobs.",
+        },
+        ApiEndpoint {
+            method: "GET",
             path: "/api/buyers/dispatch/{bucket_key}",
-            purpose: "Return the sealed dispatch blob for a buyer-held bucket key.",
+            purpose: "Return one sealed dispatch blob for a key discovered through the dispatch list.",
         },
     ]
 }
@@ -40,6 +52,7 @@ pub fn endpoint_vector() -> Vec<ApiEndpoint> {
 pub struct RegisterCreatorDropRequest {
     pub creator_id: String,
     pub creator_ufvk: String,
+    pub deposit_addr: String,
     pub price_zat: u64,
     pub k_drop: [u8; 32],
 }
@@ -59,6 +72,14 @@ pub struct CreatorDropRecord {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PublicCatalogEntry {
+    pub drop_id: u64,
+    pub creator_id: String,
+    pub price_zat: u64,
+    pub deposit_addr: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DispatchBlobRecord {
     pub bucket_key: String,
     pub bytes: Vec<u8>,
@@ -68,6 +89,14 @@ pub struct DispatchBlobRecord {
 pub struct DispatchLookupResponse {
     pub bucket_key: String,
     pub bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DispatchListResponse {
+    /// Dispatch blob keys only. Content blob keys are intentionally excluded so
+    /// buyer polling never downloads large encrypted content while looking for
+    /// its 80-byte dispatch blob.
+    pub bucket_keys: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -128,6 +157,7 @@ impl ApiVectors {
                 price_zat: req.price_zat,
                 k_drop: req.k_drop,
                 creator_ufvk: req.creator_ufvk,
+                deposit_addr: req.deposit_addr,
             },
             active: true,
         });
@@ -136,6 +166,22 @@ impl ApiVectors {
             drop_id,
             creator_id: req.creator_id,
         })
+    }
+
+    /// Endpoint handler for `GET /api/buyers/dispatch`.
+    ///
+    /// This is the buyer discovery surface requested by Lane B: buyers fetch
+    /// dispatch keys only, then `GET` individual 80-byte dispatch blobs and
+    /// trial-open them locally with their `e_priv`.
+    pub fn list_dispatch_keys(&self) -> DispatchListResponse {
+        let inner = self.inner.lock().unwrap();
+        DispatchListResponse {
+            bucket_keys: inner
+                .dispatches
+                .iter()
+                .map(|record| record.bucket_key.clone())
+                .collect(),
+        }
     }
 
     /// Endpoint handler for `GET /api/buyers/dispatch/{bucket_key}`.
@@ -153,6 +199,26 @@ impl ApiVectors {
 
     pub fn creator_drops(&self) -> Vec<CreatorDropRecord> {
         self.inner.lock().unwrap().drops.clone()
+    }
+
+    /// Endpoint handler for `GET /api/catalog`.
+    ///
+    /// Public catalog entries contain buyer payment data only. Secrets such as
+    /// `creator_ufvk` and `k_drop` remain inside the catalog boundary.
+    pub fn list_public_catalog(&self) -> Vec<PublicCatalogEntry> {
+        self.inner
+            .lock()
+            .unwrap()
+            .drops
+            .iter()
+            .filter(|record| record.active)
+            .map(|record| PublicCatalogEntry {
+                drop_id: record.drop_id,
+                creator_id: record.creator_id.clone(),
+                price_zat: record.config.price_zat,
+                deposit_addr: record.config.deposit_addr.clone(),
+            })
+            .collect()
     }
 
     pub fn dispatch_blobs(&self) -> Vec<DispatchBlobRecord> {
@@ -199,8 +265,22 @@ fn validate_registration(req: &RegisterCreatorDropRequest) -> Result<()> {
     if req.creator_ufvk.trim().is_empty() {
         return Err(anyhow!("creator_ufvk is required"));
     }
+    validate_deposit_addr(&req.deposit_addr)?;
     if req.price_zat == 0 {
         return Err(anyhow!("price_zat must be greater than zero"));
+    }
+    Ok(())
+}
+
+fn validate_deposit_addr(addr: &str) -> Result<()> {
+    let addr = addr.trim();
+    if addr.is_empty() {
+        return Err(anyhow!("deposit_addr is required"));
+    }
+    if addr.starts_with("t1") || addr.starts_with("t3") {
+        return Err(anyhow!(
+            "deposit_addr must be shielded; transparent t-addresses cannot carry shielded memos"
+        ));
     }
     Ok(())
 }
@@ -217,6 +297,7 @@ mod tests {
         RegisterCreatorDropRequest {
             creator_id: "creator-1".to_string(),
             creator_ufvk: "uview1test".to_string(),
+            deposit_addr: "u1testshieldeddeposit".to_string(),
             price_zat: 10_000,
             k_drop: [9u8; 32],
         }
@@ -225,10 +306,16 @@ mod tests {
     #[test]
     fn endpoint_vector_lists_creator_and_buyer_routes() {
         let endpoints = endpoint_vector();
-        assert_eq!(endpoints.len(), 2);
+        assert_eq!(endpoints.len(), 4);
         assert!(endpoints
             .iter()
             .any(|e| e.method == "POST" && e.path == "/api/creators/{creator_id}/drops"));
+        assert!(endpoints
+            .iter()
+            .any(|e| e.method == "GET" && e.path == "/api/catalog"));
+        assert!(endpoints
+            .iter()
+            .any(|e| e.method == "GET" && e.path == "/api/buyers/dispatch"));
         assert!(endpoints
             .iter()
             .any(|e| e.method == "GET" && e.path == "/api/buyers/dispatch/{bucket_key}"));
@@ -244,7 +331,17 @@ mod tests {
         let config = api.lookup(response.drop_id).unwrap();
         assert_eq!(config.price_zat, 10_000);
         assert_eq!(config.k_drop, [9u8; 32]);
+        assert_eq!(config.deposit_addr, "u1testshieldeddeposit");
         assert_eq!(api.creator_drops().len(), 1);
+        assert_eq!(
+            api.list_public_catalog(),
+            vec![PublicCatalogEntry {
+                drop_id: 1,
+                creator_id: "creator-1".to_string(),
+                price_zat: 10_000,
+                deposit_addr: "u1testshieldeddeposit".to_string(),
+            }]
+        );
     }
 
     #[test]
@@ -253,6 +350,17 @@ mod tests {
         let mut req = registration();
         req.price_zat = 0;
         assert!(api.register_creator_drop(req).is_err());
+    }
+
+    #[test]
+    fn rejects_transparent_deposit_address_for_memo_payments() {
+        let api = ApiVectors::new();
+        for transparent in ["t1abc", "t3abc"] {
+            let mut req = registration();
+            req.deposit_addr = transparent.to_string();
+            let err = api.register_creator_drop(req).unwrap_err().to_string();
+            assert!(err.contains("shielded"));
+        }
     }
 
     #[tokio::test]
@@ -277,7 +385,38 @@ mod tests {
         let found = api.lookup_dispatch(&dispatch.bucket_key).unwrap();
         assert_eq!(found.bucket_key, dispatch.bucket_key);
         assert_eq!(found.bytes.len(), DISPATCH_BLOB_LEN);
+        assert_eq!(
+            api.list_dispatch_keys(),
+            DispatchListResponse {
+                bucket_keys: vec![dispatch.bucket_key],
+            }
+        );
         assert_eq!(api.dispatch_blobs().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn dispatch_list_exposes_keys_without_blob_bytes_or_content() {
+        let api = ApiVectors::new();
+
+        api.put("deadbeef", &[1u8; DISPATCH_BLOB_LEN])
+            .await
+            .unwrap();
+        api.put("cafebabe", &[2u8; DISPATCH_BLOB_LEN])
+            .await
+            .unwrap();
+
+        let list = api.list_dispatch_keys();
+
+        assert_eq!(
+            list,
+            DispatchListResponse {
+                bucket_keys: vec!["deadbeef".to_string(), "cafebabe".to_string()],
+            }
+        );
+        // The public discovery response contains keys only; clients fetch and
+        // trial-open individual dispatch blobs through lookup_dispatch.
+        assert_eq!(list.bucket_keys.len(), api.dispatch_blobs().len());
+        assert!(api.lookup_dispatch("deadbeef").is_some());
     }
 
     #[test]

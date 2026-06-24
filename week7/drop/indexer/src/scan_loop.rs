@@ -268,6 +268,7 @@ mod tests {
                 price_zat: self.price_zat,
                 k_drop: self.k_drop,
                 creator_ufvk: "uview1mock".to_string(),
+                deposit_addr: "u1mockshielded".to_string(),
             })
         }
     }

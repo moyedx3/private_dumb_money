@@ -17,6 +17,7 @@ pub struct DropConfig {
     pub price_zat: u64,
     pub k_drop: [u8; 32],
     pub creator_ufvk: String,
+    pub deposit_addr: String,
 }
 
 /// Catalog boundary owned by Lane A2.
