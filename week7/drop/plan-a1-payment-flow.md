@@ -10,9 +10,9 @@
 
 ---
 
-## Current implementation status (2026-06-21)
+## Current implementation status (2026-06-24)
 
-Overall plan completion: **about 65–70%**. The chain-query, UFVK detection, memo codec, dispatch wrapping, replay guard, payment engine, and scan-loop wiring foundations are working; live smoke and encrypted cursor/replay persistence remain pending.
+Overall plan completion: **about 87%**. The chain-query, UFVK detection, memo codec, dispatch wrapping, replay guard, payment engine, scan-loop wiring, live smoke E2E, encrypted state boundary, and API service vectors are working. Actual TEE sealing-key integration, production HTTP/enclave adapter, and polling service remain pending.
 
 | Plan task | Current state | Evidence / files |
 | --- | --- | --- |
@@ -25,7 +25,9 @@ Overall plan completion: **about 65–70%**. The chain-query, UFVK detection, me
 | Task 5 — replay guard | **Implemented and unit-tested** | `indexer/src/engine.rs`; `SeenTxids::first_time` rejects duplicate txids. Demo scope is in-memory; production persistence remains open. |
 | Task 6 — payment engine | **Implemented and unit-tested** | `indexer/src/engine.rs`; `Engine::on_note` does replay check, catalog lookup, underpay skip, sealed-box wrap, opaque key derivation, and `Bucket::put`. Tests cover valid payment, underpay, duplicate txid, and unknown drop. |
 | Task 7 — scan loop | **Implemented and unit-tested** | `indexer/src/scan_loop.rs`; `scan_once` fetches compact txids/full txs and wires `detect_incoming` → `decode_memo` → `Engine::on_note`. Unit tests cover compact→full fetch plumbing, `A1B64` memo dispatch, no-memo skip, and undecodable memo skip. Full raw-tx fixture E2E remains pending. |
-| Task 8 — live smoke binary | **Not started** | `indexer/src/bin/scan-live.rs` missing. |
+| Task 8 — live smoke binary | **Implemented and live-verified** | `indexer/src/bin/scan-live.rs`; accepts `A1_UFVK` or `<ufvk> [start] [end]`, uses real `GrpcClient`, demo in-memory Catalog, and logging Bucket. Live run against height `3387683` produced one `bucket.put ... len=80` and one dispatch for `drop_id=1`, `value_zat=10000`. |
+| Task 9 — encrypted cursor/replay state | **Boundary implemented; TEE sealing pending** | `indexer/src/state.rs`; `ScanState`, `MemoryScanState`, `StateCipher`, `EncryptedFileScanState`, development `SecretboxStateCipher`, and state-aware scan path are implemented and unit-tested. `scan-live` can opt into encrypted state with `A1_STATE_FILE`; production must replace env/dev key with an enclave sealing-key `StateCipher`. |
+| Task 10 — API service vectors | **Implemented and unit-tested** | `indexer/src/api.rs`, `a1-api-vectors.md`; creator drop registration vector and buyer dispatch lookup vector exist without adding an HTTP dependency. `ApiVectors` implements `Catalog` and `Bucket`, so registered drops are usable by `Engine`, and generated dispatch blobs can be looked up by `bucket_key`. |
 
 ### Current runnable commands
 
@@ -48,6 +50,23 @@ Full transaction decrypt and memo display:
 ```bash
 A1_UFVK=<creator_ufvk> A1_SCAN_START=3363067 A1_SCAN_END=3363067 \
   cargo run --manifest-path indexer/Cargo.toml --bin probe-ufvk
+```
+
+Live payment-flow smoke through engine + logging bucket:
+
+```bash
+A1_UFVK=<creator_ufvk> A1_SCAN_START=<payment_height> A1_SCAN_END=<payment_height> \
+A1_DEMO_DROP_ID=1 A1_DEMO_PRICE_ZAT=10000 \
+  cargo run --manifest-path indexer/Cargo.toml --bin scan-live
+```
+
+Development encrypted-state smoke (dev key only; production uses enclave sealing):
+
+```bash
+A1_UFVK=<creator_ufvk> A1_SCAN_START=<payment_height> A1_SCAN_END=<payment_height> \
+A1_DEMO_DROP_ID=1 A1_DEMO_PRICE_ZAT=10000 \
+A1_STATE_FILE=.omx/a1-scan-state.enc A1_STATE_KEY_HEX=<64_hex_dev_key> \
+  cargo run --manifest-path indexer/Cargo.toml --bin scan-live
 ```
 
 Ignored live integration test for an already-mined memo-bearing shielded tx:
@@ -82,8 +101,8 @@ Current scan-loop implementation target is now complete at the library/unit-test
 
 Priority order:
 1. ✅ Implement `scan_loop.rs` with `scan_once(client, ufvk, network, start, end, engine)`.
-2. Implement `scan-live.rs` as a live smoke CLI. Default can inspect the latest block, but payment verification should accept `A1_SCAN_START/A1_SCAN_END` for historical ranges.
-3. Add cursor/replay persistence for TEE operation: `last_scanned_height` and processed txids. Because this runs in TEE with disk/volume state, persisted state should be encrypted. Start with a `ScanState` trait and memory implementation, then add an encrypted file implementation using a TEE/KMS-derived key.
+2. ✅ Implement `scan-live.rs` as a live smoke CLI. Default can inspect the latest block, but payment verification accepts `A1_SCAN_START/A1_SCAN_END` or `<ufvk> [start] [end]` for historical ranges.
+3. ✅ Add cursor/replay persistence boundary for TEE operation: `last_scanned_height` and processed txids. `ScanState` + encrypted file storage are implemented. Remaining production work is replacing the development secretbox key source with a TEE/KMS-derived sealing-key adapter and adding the long-running service loop.
 
 Operational distinction:
 - Development/live smoke: manual range scanning is acceptable.
@@ -559,9 +578,9 @@ pub async fn scan_once<C: LightwalletdClient, K: Catalog, B: Bucket>(
 
 **Files:** Create `week7/drop/indexer/src/bin/scan-live.rs`.
 
-- [ ] **Step 1: Write a `main`** that takes `<creator-ufvk> <start> <end>`, builds `GrpcClient::new("https://zec.rocks:443", None)`, an in-memory `Catalog` with one demo drop, and a logging `Bucket` that prints `put(key, len)`, then calls `scan_once`. (No new test; this is the manual end-to-end against the real spike12 payment.)
-- [ ] **Step 2: Run** `cargo run -p drop-indexer --bin scan-live -- "$(cat /tmp/spike12_ufvk.txt)" <h> <h>` over the block holding the spike12 tx — Expected: prints one `put(...)` line.
-- [ ] **Step 3: Commit** — `git commit -m "feat(drop-indexer): live smoke binary"`
+- [x] **Step 1: Write a `main`** that takes `A1_UFVK` or `<creator-ufvk> [start] [end]`, builds `GrpcClient` with `LIGHTWALLETD_URL`/fallback defaults, an in-memory `Catalog` with one demo drop, and a logging `Bucket` that prints `bucket.put key=... len=...`, then calls `scan_once`.
+- [x] **Step 2: Run** `A1_UFVK=<creator_ufvk> A1_SCAN_START=<h> A1_SCAN_END=<h> cargo run --manifest-path indexer/Cargo.toml --bin scan-live` over the block holding the memo-bearing tx — PASS at height `3387683`: printed one `bucket.put ... len=80` line plus one `dispatch ...` line.
+- [ ] **Step 3: Commit** — `git commit -m "Feat: add live scan smoke"`
 
 ---
 
