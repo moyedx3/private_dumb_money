@@ -9,13 +9,17 @@ use drop_indexer::server::{router, AppState};
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let sock = std::env::var("DSTACK_SOCKET").unwrap_or_else(|_| "/var/run/dstack.sock".into());
-    let bucket_dir = std::env::var("BUCKET_DIR").unwrap_or_else(|_| "/data/bucket".into());
+    let bucket_root = std::path::PathBuf::from(
+        std::env::var("BUCKET_DIR").unwrap_or_else(|_| "/data/bucket".into()),
+    );
     let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8080);
 
     let ds = Dstack::new(sock);
     // KMS-derived seed, stable per measurement (changes on rebuild — see C4 / Task 9).
     let seed = ds.get_key("drop/provisioning").await?;
-    let state = AppState::new(ds, seed, CatalogStore::default(), FsBucket::new(&bucket_dir)?);
+    let content = FsBucket::new(bucket_root.join("content"))?;
+    let dispatch = FsBucket::new(bucket_root.join("dispatch"))?;
+    let state = AppState::new(ds, seed, CatalogStore::default(), content, dispatch);
     // Integration point: Lane A1's scan_loop::run_loop is spawned here once A1 lands,
     // sharing this state's CatalogStore + bucket.
 
