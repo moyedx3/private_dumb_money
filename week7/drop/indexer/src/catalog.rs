@@ -30,6 +30,7 @@ impl CatalogStore {
                 price_zec: zat_to_zec_string(c.price_zat),
                 h_content: c.h_content.clone(),
                 title: title.clone(),
+                deposit_addr: c.deposit_addr.clone(),
             })
             .collect()
     }
@@ -69,6 +70,7 @@ mod tests {
                 k_drop: [1u8; 32],
                 creator_ufvk: "uview1secret".into(),
                 h_content: "h1".into(),
+                deposit_addr: "u1demo".into(),
             },
             "Cat photo".into(),
         );
@@ -80,6 +82,7 @@ mod tests {
         assert_eq!(public.len(), 1);
         assert_eq!(public[0].h_content, "h1");
         assert_eq!(public[0].price_zec, "0.000005");
+        assert_eq!(public[0].deposit_addr, "u1demo");
         // the public JSON must not leak the viewing key (or any secret)
         let json = serde_json::to_string(&public).unwrap();
         assert!(!json.contains("uview1secret"));

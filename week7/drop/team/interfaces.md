@@ -34,12 +34,14 @@ blob = crypto_box_seal(K_drop, e_pub)
 - 구매자(B): `crypto_box_seal_open(blob, e_pub, e_priv)` → `K_drop` 복원.
 - 곡선: Curve25519 (양쪽 동일 — Rust `dryoc` ↔ JS `libsodium-wrappers`).
 - **버킷 키**(이 blob이 올라가는 파일 이름): `blake2b256(ek_pub || txid)` 의 hex. → 구매자/드롭 식별자 안 들어감(프라이버시).
+- 버킷 읽기(B): `GET /dispatch` → dispatch 키 배열(JSON), `GET /dispatch/:key` → 80B blob,
+  `GET /bucket/:key` → content blob. dispatch와 content는 분리된 store (R-A2-1·R-A2-3).
 
 ## I3. 카탈로그 — C가 등록, A2가 보관/게시, B가 조회
 
 **(a) 공개 카탈로그 엔트리** (구매자 B가 목록에서 봄, JSON):
 ```json
-{ "drop_id": 1, "price_zec": "0.01", "h_content": "<콘텐츠 blob 버킷 키>", "title": "고양이 사진" }
+{ "drop_id": 1, "price_zec": "0.01", "h_content": "<콘텐츠 blob 버킷 키>", "title": "고양이 사진", "deposit_addr": "<가려진(shielded) 수신 주소>" }
 ```
 
 **(b) 내부 드롭 설정** (서버 enclave가 보관, A2가 저장 / A1이 조회 — 절대 공개 안 함):
@@ -48,8 +50,10 @@ drop_id     : u64
 price_zat   : u64            // zatoshi (1 ZEC = 100,000,000 zat)
 k_drop      : [u8; 32]       // 콘텐츠 마스터 열쇠
 creator_ufvk: String         // 크리에이터 보기전용키(UFVK 문자열, IVK 추출용)
+h_content   : String         // 콘텐츠 blob 버킷 키 (sha256 hex)
+deposit_addr: String         // 가려진(shielded) 수신 주소 — A1이 입금 감시 (투명 t-addr는 provision에서 거부)
 ```
-A1이 쓰는 조회 인터페이스: `Catalog::lookup(drop_id) -> Option<DropConfig{price_zat, k_drop, creator_ufvk}>`
+A1이 쓰는 조회 인터페이스: `Catalog::lookup(drop_id) -> Option<DropConfig{price_zat, k_drop, creator_ufvk, h_content, deposit_addr}>`
 
 ## I4. 콘텐츠 blob (크리에이터 → 구매자, 버킷 경유) — C 소유
 

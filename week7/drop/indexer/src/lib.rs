@@ -21,6 +21,7 @@ pub struct DropConfig {
     pub k_drop: [u8; 32],
     pub creator_ufvk: String,
     pub h_content: String,
+    pub deposit_addr: String,
 }
 
 /// A1 looks up a drop's config by id.
@@ -45,6 +46,7 @@ pub struct ProvisionPayload {
     pub k_drop: String,
     pub creator_ufvk: String,
     pub h_content: String,
+    pub deposit_addr: String,
 }
 
 /// Interface I3-a — public catalog entry the buyer browses. No secrets.
@@ -54,4 +56,5 @@ pub struct CatalogEntry {
     pub price_zec: String,
     pub h_content: String,
     pub title: String,
+    pub deposit_addr: String,
 }
