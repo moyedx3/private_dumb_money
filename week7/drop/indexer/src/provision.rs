@@ -26,6 +26,13 @@ fn key_bytes(k: &[u8]) -> [u8; 32] {
     out
 }
 
+/// Reject transparent Zcash addresses (mainnet `t1`/`t3`, testnet `tm`/`t2`). A transparent
+/// recipient has no memo field, so A1 would never receive the buyer's `drop_id‖e_pub` and the
+/// unlock path silently breaks (lane-B §8 trap 1). Shielded addresses (`z…`/`u…`) carry the memo.
+fn is_shielded_addr(addr: &str) -> bool {
+    !addr.is_empty() && !addr.starts_with('t')
+}
+
 /// Open the creator's sealed I5 payload with the enclave keypair → `(drop_id, DropConfig)`.
 /// `sealed` is a libsodium `crypto_box_seal` blob. Fails for anyone without the enclave's
 /// secret key — that's the secret-IN guarantee.
@@ -50,9 +57,19 @@ pub fn open_provision(sealed: &[u8], kp: &StackKeyPair) -> anyhow::Result<(u64, 
     raw.zeroize();
     let k_drop = k_drop_res.map_err(|_| anyhow::anyhow!("k_drop is not 32 bytes"))?;
 
+    if !is_shielded_addr(&p.deposit_addr) {
+        anyhow::bail!("deposit_addr must be a shielded address (transparent t-addr drops the memo)");
+    }
+
     Ok((
         p.drop_id,
-        DropConfig { price_zat: p.price_zat, k_drop, creator_ufvk: p.creator_ufvk, h_content: p.h_content },
+        DropConfig {
+            price_zat: p.price_zat,
+            k_drop,
+            creator_ufvk: p.creator_ufvk,
+            h_content: p.h_content,
+            deposit_addr: p.deposit_addr,
+        },
     ))
 }
 
@@ -87,6 +104,7 @@ mod tests {
             k_drop: hex::encode([0xAB; 32]),
             creator_ufvk: "uview1demo".into(),
             h_content: "abc123".into(),
+            deposit_addr: "u1demo".into(),
         };
         let sealed = creator_seal(&serde_json::to_vec(&payload).unwrap(), &kp);
 
@@ -97,9 +115,43 @@ mod tests {
         assert_eq!(cfg.k_drop, [0xAB; 32]);
         assert_eq!(cfg.creator_ufvk, "uview1demo");
         assert_eq!(cfg.h_content, "abc123");
+        assert_eq!(cfg.deposit_addr, "u1demo");
 
         // operator (wrong/missing secret key) cannot open it
         let wrong = crate::attest::provisioning_keypair_from_seed(&[8u8; 32]);
         assert!(open_provision(&sealed, &wrong).is_err());
+    }
+
+    #[test]
+    fn provision_rejects_transparent_deposit_addr() {
+        // A transparent t-addr has no memo field, so A1 would never receive drop_id‖e_pub
+        // → unlock silently breaks. Provision must reject it.
+        let kp = crate::attest::provisioning_keypair_from_seed(&[7u8; 32]);
+        let payload = crate::ProvisionPayload {
+            drop_id: 1,
+            price_zat: 500,
+            k_drop: hex::encode([2u8; 32]),
+            creator_ufvk: "uview1x".into(),
+            h_content: "h1".into(),
+            deposit_addr: "t1ExampleTransparentAddress".into(),
+        };
+        let sealed = creator_seal(&serde_json::to_vec(&payload).unwrap(), &kp);
+        assert!(open_provision(&sealed, &kp).is_err());
+    }
+
+    #[test]
+    fn provision_accepts_shielded_deposit_addr() {
+        let kp = crate::attest::provisioning_keypair_from_seed(&[7u8; 32]);
+        let payload = crate::ProvisionPayload {
+            drop_id: 1,
+            price_zat: 500,
+            k_drop: hex::encode([2u8; 32]),
+            creator_ufvk: "uview1x".into(),
+            h_content: "h1".into(),
+            deposit_addr: "u1shieldedunifiedaddress".into(),
+        };
+        let sealed = creator_seal(&serde_json::to_vec(&payload).unwrap(), &kp);
+        let (_, cfg) = open_provision(&sealed, &kp).unwrap();
+        assert_eq!(cfg.deposit_addr, "u1shieldedunifiedaddress");
     }
 }

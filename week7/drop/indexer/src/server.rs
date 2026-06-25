@@ -129,6 +129,7 @@ mod tests {
             k_drop: hex::encode([2u8; 32]),
             creator_ufvk: "uview1secret".into(),
             h_content: "h1".into(),
+            deposit_addr: "u1demo".into(),
         };
         let sealed = seal_to_enclave(&serde_json::to_vec(&payload).unwrap(), &kp.public_key);
 
@@ -150,6 +151,7 @@ mod tests {
         assert!(s.contains("\"price_zec\":\"0.000005\""));
         assert!(s.contains("Cat"));
         assert!(!s.contains("uview1secret")); // secrets stay internal
+        assert!(s.contains("u1demo")); // deposit_addr surfaces in the public catalog (R-A2-2)
     }
 
     #[tokio::test]
@@ -165,6 +167,7 @@ mod tests {
                 k_drop: hex::encode([2u8; 32]),
                 creator_ufvk: "uview1x".into(),
                 h_content: "h1".into(),
+                deposit_addr: "u1demo".into(),
             };
             seal_to_enclave(&serde_json::to_vec(&payload).unwrap(), &kp.public_key)
         };
