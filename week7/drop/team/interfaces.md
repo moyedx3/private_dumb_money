@@ -50,8 +50,10 @@ drop_id     : u64
 price_zat   : u64            // zatoshi (1 ZEC = 100,000,000 zat)
 k_drop      : [u8; 32]       // 콘텐츠 마스터 열쇠
 creator_ufvk: String         // 크리에이터 보기전용키(UFVK 문자열, IVK 추출용)
+h_content   : String         // 콘텐츠 blob 버킷 키 (sha256 hex)
+deposit_addr: String         // 가려진(shielded) 수신 주소 — A1이 입금 감시 (투명 t-addr는 provision에서 거부)
 ```
-A1이 쓰는 조회 인터페이스: `Catalog::lookup(drop_id) -> Option<DropConfig{price_zat, k_drop, creator_ufvk}>`
+A1이 쓰는 조회 인터페이스: `Catalog::lookup(drop_id) -> Option<DropConfig{price_zat, k_drop, creator_ufvk, h_content, deposit_addr}>`
 
 ## I4. 콘텐츠 blob (크리에이터 → 구매자, 버킷 경유) — C 소유
 

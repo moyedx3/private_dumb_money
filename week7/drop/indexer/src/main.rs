@@ -21,7 +21,7 @@ async fn main() -> anyhow::Result<()> {
     let dispatch = FsBucket::new(bucket_root.join("dispatch"))?;
     let state = AppState::new(ds, seed, CatalogStore::default(), content, dispatch);
     // Integration point: Lane A1's scan_loop::run_loop is spawned here once A1 lands,
-    // sharing this state's CatalogStore + bucket.
+    // sharing this state's CatalogStore + content/dispatch stores.
 
     let app = router(state);
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port)).await?;
