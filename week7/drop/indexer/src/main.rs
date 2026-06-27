@@ -21,8 +21,7 @@ async fn main() -> anyhow::Result<()> {
         .unwrap_or(8080);
 
     let ds = Dstack::new(sock);
-    // KMS-derived seed, stable per measurement (changes on rebuild — see C4 / Task 9).
-    let seed = ds.get_key("drop/provisioning").await?;
+    let seed = provisioning_seed(&ds).await?;
     let content = FsBucket::new(bucket_root.join("content"))?;
     let dispatch = FsBucket::new(bucket_root.join("dispatch"))?;
     let catalog = CatalogStore::default();
@@ -62,6 +61,25 @@ fn maybe_spawn_a1_scanner(catalog: CatalogStore, dispatch: FsBucket) {
             eprintln!("A1 scanner stopped: {err:?}");
         }
     });
+}
+
+async fn provisioning_seed(ds: &Dstack) -> anyhow::Result<[u8; 32]> {
+    if let Ok(hex_seed) = std::env::var("A2_DEV_PROVISIONING_SEED_HEX") {
+        eprintln!("WARNING: using A2_DEV_PROVISIONING_SEED_HEX; local demo only, not TEE-secure");
+        return hex_32(&hex_seed, "A2_DEV_PROVISIONING_SEED_HEX");
+    }
+
+    // KMS-derived seed, stable per measurement (changes on rebuild — see C4 / Task 9).
+    ds.get_key("drop/provisioning").await
+}
+
+fn hex_32(value: &str, name: &str) -> anyhow::Result<[u8; 32]> {
+    let value = value.trim().strip_prefix("0x").unwrap_or(value.trim());
+    let bytes = hex::decode(value)?;
+    bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| anyhow::anyhow!("{name} must be 32 bytes / 64 hex chars"))
 }
 
 fn env_bool(name: &str) -> bool {
