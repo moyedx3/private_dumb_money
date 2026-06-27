@@ -3,18 +3,40 @@ name = "drop-indexer"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "drop_indexer"
+path = "src/lib.rs"
+
 [dependencies]
 anyhow = "1"
 async-trait = "0.1"
 axum = "0.7"
-dryoc = "0.8"
+blake2 = "0.10"
+dryoc = "0.7"
+hex = "0.4"
+orchard = "0.13"
+prost = "0.12"
+sapling-crypto = { version = "0.7", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
-hex = "0.4"
+thiserror = "1"
 tokio = { version = "1", features = ["full"] }
-zeroize = "1"
+tonic = { version = "0.11", features = ["tls", "tls-webpki-roots"] }
 tower-http = { version = "0.5", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+zecscope-scanner = "0.1"
+zcash_keys = { version = "0.13", default-features = false, features = ["sapling", "orchard"] }
+zcash_note_encryption = "0.4"
+zcash_primitives = "0.27"
+zcash_protocol = "0.8"
+zeroize = "1"
+zip32 = "0.2"
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }
+
+[build-dependencies]
+tonic-build = "0.11"
+protoc-bin-vendored = "3"

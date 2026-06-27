@@ -2,21 +2,33 @@
 //! trait) and serves the public catalog JSON (browsed by Lane B). Secrets never leave here.
 
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 
 use crate::{Catalog, CatalogEntry, DropConfig};
 
 /// In-memory catalog (demo scope). Production must persist this — a restart otherwise loses
 /// every provisioned drop, forcing creators to re-provision.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct CatalogStore {
-    inner: RwLock<HashMap<u64, (DropConfig, String)>>, // drop_id -> (config, title)
+    inner: Arc<RwLock<HashMap<u64, (DropConfig, String)>>>, // drop_id -> (config, title)
 }
 
 impl CatalogStore {
     /// Store (or overwrite) a provisioned drop's config + display title.
     pub fn insert(&self, drop_id: u64, cfg: DropConfig, title: String) {
         self.inner.write().unwrap().insert(drop_id, (cfg, title));
+    }
+
+    /// Snapshot internal configs for A1's scanner. This is intentionally crate-public
+    /// runtime plumbing: secrets stay in-process inside the enclave boundary and are
+    /// never serialized through HTTP.
+    pub fn configs(&self) -> Vec<(u64, DropConfig)> {
+        self.inner
+            .read()
+            .unwrap()
+            .iter()
+            .map(|(id, (cfg, _))| (*id, cfg.clone()))
+            .collect()
     }
 
     /// Public catalog entries (interface I3-a) — no secrets (no `k_drop`, no `creator_ufvk`).
@@ -51,7 +63,11 @@ fn zat_to_zec_string(zat: u64) -> String {
 
 impl Catalog for CatalogStore {
     fn lookup(&self, drop_id: u64) -> Option<DropConfig> {
-        self.inner.read().unwrap().get(&drop_id).map(|(c, _)| c.clone())
+        self.inner
+            .read()
+            .unwrap()
+            .get(&drop_id)
+            .map(|(c, _)| c.clone())
     }
 }
 
@@ -77,6 +93,8 @@ mod tests {
 
         assert_eq!(store.lookup(1).unwrap().price_zat, 500);
         assert!(store.lookup(2).is_none());
+        assert_eq!(store.configs().len(), 1);
+        assert_eq!(store.configs()[0].0, 1);
 
         let public = store.public_entries();
         assert_eq!(public.len(), 1);

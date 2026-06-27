@@ -1,21 +1,30 @@
-//! drop-indexer — Lane A2 (enclave platform).
+//! drop-indexer — Lane A2 enclave platform plus Lane A1 payment scanner.
 //!
-//! Owns the trust boundary: `/attest` (interface I6), `/provision` secret-IN (I5),
-//! the catalog (I3), the bucket, and the HTTP server. Reuses spike #3's verified
-//! "encrypt-to-enclave" flow (see week7/drop/spike3/RUNBOOK.md).
-//!
-//! These boundary types are shared with Lane A1: A1 *mocks* them; A2 provides the
-//! real implementations (catalog.rs, bucket.rs).
+//! A2 owns the trust boundary and HTTP/runtime surfaces: `/attest`, `/provision`,
+//! the catalog, content bucket, dispatch bucket, and buyer/creator routes.
+//! A1 owns payment detection: UFVK/lightwalletd scanning, memo decoding, payment
+//! validation, and dispatch blob production. The shared `Catalog` and `Bucket`
+//! traits are the seam between those roles.
 
-pub mod dstack;
+pub mod api;
 pub mod attest;
-pub mod provision;
-pub mod catalog;
 pub mod bucket;
+pub mod catalog;
+pub mod detect;
+pub mod dispatch;
+pub mod dstack;
+pub mod engine;
+pub mod lightwalletd;
+pub mod memo;
+pub mod provision;
+pub mod scan_loop;
 pub mod server;
+pub mod state;
+pub mod zecscope_adapter;
 
-/// Internal drop config (interface I3-b). Read by A1's engine via the `Catalog` trait.
-#[derive(Clone)]
+/// Internal drop config (interface I3-b). A2 stores it after provisioning;
+/// A1 reads it through [`Catalog`] while scanning payments.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DropConfig {
     pub price_zat: u64,
     pub k_drop: [u8; 32],
@@ -29,7 +38,8 @@ pub trait Catalog: Send + Sync {
     fn lookup(&self, drop_id: u64) -> Option<DropConfig>;
 }
 
-/// Hash-addressed blob storage. A1 writes dispatch blobs; B reads/lists them; C writes content blobs.
+/// Hash-addressed blob storage. A1 writes dispatch blobs; B reads/lists
+/// dispatch blobs; C writes content blobs.
 #[async_trait::async_trait]
 pub trait Bucket: Send + Sync {
     async fn put(&self, key: &str, bytes: &[u8]) -> anyhow::Result<()>;
@@ -37,8 +47,9 @@ pub trait Bucket: Send + Sync {
     async fn list(&self) -> anyhow::Result<Vec<String>>;
 }
 
-/// Interface I5 — what the creator seals to the enclave. `k_drop` is 32 bytes, hex-encoded
-/// because this demo uses JSON for the "CBOR/JSON" payload allowed by interfaces.md.
+/// Interface I5 — what the creator seals to the enclave. `k_drop` is 32 bytes,
+/// hex-encoded because this demo uses JSON for the "CBOR/JSON" payload allowed
+/// by interfaces.md.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ProvisionPayload {
     pub drop_id: u64,

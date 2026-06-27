@@ -80,10 +80,16 @@ struct ProvisionQuery {
     title: Option<String>,
 }
 
-async fn provision_h(State(s): State<AppState>, Query(q): Query<ProvisionQuery>, body: Bytes) -> StatusCode {
+async fn provision_h(
+    State(s): State<AppState>,
+    Query(q): Query<ProvisionQuery>,
+    body: Bytes,
+) -> StatusCode {
     match open_provision(&body, &s.inner.kp) {
         Ok((drop_id, cfg)) => {
-            s.inner.catalog.insert(drop_id, cfg, q.title.unwrap_or_else(|| "untitled".into()));
+            s.inner
+                .catalog
+                .insert(drop_id, cfg, q.title.unwrap_or_else(|| "untitled".into()));
             StatusCode::OK
         }
         Err(_) => StatusCode::BAD_REQUEST,
@@ -94,7 +100,10 @@ async fn catalog_h(State(s): State<AppState>) -> Json<Vec<CatalogEntry>> {
     Json(s.inner.catalog.public_entries())
 }
 
-async fn bucket_get_h(State(s): State<AppState>, Path(key): Path<String>) -> Result<Vec<u8>, StatusCode> {
+async fn bucket_get_h(
+    State(s): State<AppState>,
+    Path(key): Path<String>,
+) -> Result<Vec<u8>, StatusCode> {
     match s.inner.content.get(&key).await {
         Ok(Some(b)) => Ok(b),
         Ok(None) => Err(StatusCode::NOT_FOUND),
@@ -102,7 +111,11 @@ async fn bucket_get_h(State(s): State<AppState>, Path(key): Path<String>) -> Res
     }
 }
 
-async fn bucket_put_h(State(s): State<AppState>, Path(key): Path<String>, body: Bytes) -> StatusCode {
+async fn bucket_put_h(
+    State(s): State<AppState>,
+    Path(key): Path<String>,
+    body: Bytes,
+) -> StatusCode {
     match s.inner.content.put(&key, &body).await {
         Ok(_) => StatusCode::OK,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -116,7 +129,10 @@ async fn dispatch_list_h(State(s): State<AppState>) -> Result<Json<Vec<String>>,
     }
 }
 
-async fn dispatch_get_h(State(s): State<AppState>, Path(key): Path<String>) -> Result<Vec<u8>, StatusCode> {
+async fn dispatch_get_h(
+    State(s): State<AppState>,
+    Path(key): Path<String>,
+) -> Result<Vec<u8>, StatusCode> {
     match s.inner.dispatch.get(&key).await {
         Ok(Some(b)) => Ok(b),
         Ok(None) => Err(StatusCode::NOT_FOUND),
@@ -162,7 +178,11 @@ mod tests {
 
         let res = app
             .clone()
-            .oneshot(Request::post("/provision?title=Cat").body(Body::from(sealed)).unwrap())
+            .oneshot(
+                Request::post("/provision?title=Cat")
+                    .body(Body::from(sealed))
+                    .unwrap(),
+            )
             .await
             .unwrap();
         assert_eq!(res.status(), 200);
@@ -172,7 +192,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res2.status(), 200);
-        let body = axum::body::to_bytes(res2.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res2.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let s = String::from_utf8(body.to_vec()).unwrap();
         assert!(s.contains("\"drop_id\":1"));
         assert!(s.contains("\"price_zec\":\"0.000005\""));
@@ -201,13 +223,22 @@ mod tests {
         for price in [500u64, 700] {
             let res = app
                 .clone()
-                .oneshot(Request::post("/provision?title=Cat").body(Body::from(seal_price(price))).unwrap())
+                .oneshot(
+                    Request::post("/provision?title=Cat")
+                        .body(Body::from(seal_price(price)))
+                        .unwrap(),
+                )
                 .await
                 .unwrap();
             assert_eq!(res.status(), 200);
         }
-        let res = app.oneshot(Request::get("/catalog").body(Body::empty()).unwrap()).await.unwrap();
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let res = app
+            .oneshot(Request::get("/catalog").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let s = String::from_utf8(body.to_vec()).unwrap();
         assert!(s.contains("\"price_zec\":\"0.000007\"")); // latest wins
         assert_eq!(s.matches("\"drop_id\":1").count(), 1); // exactly one entry
@@ -247,7 +278,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), 200);
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let keys: Vec<String> = serde_json::from_slice(&body).unwrap();
         assert_eq!(keys, vec!["aa".to_string()]); // content key "bb" must NOT appear
     }
@@ -265,7 +298,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(d.status(), 200);
-        let db = axum::body::to_bytes(d.into_body(), usize::MAX).await.unwrap();
+        let db = axum::body::to_bytes(d.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert_eq!(db.as_ref(), b"dblob");
 
         // a content key is not reachable through the dispatch store
@@ -282,7 +317,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(c.status(), 200);
-        let cb = axum::body::to_bytes(c.into_body(), usize::MAX).await.unwrap();
+        let cb = axum::body::to_bytes(c.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert_eq!(cb.as_ref(), b"cblob");
     }
 
@@ -304,7 +341,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(res.status(), 200);
-        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await.unwrap();
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX)
+            .await
+            .unwrap();
         let s = String::from_utf8(body.to_vec()).unwrap();
         assert!(s.contains("quote_hex"));
         assert!(s.contains("provisioning_pubkey_hex"));

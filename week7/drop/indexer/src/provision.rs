@@ -58,7 +58,9 @@ pub fn open_provision(sealed: &[u8], kp: &StackKeyPair) -> anyhow::Result<(u64, 
     let k_drop = k_drop_res.map_err(|_| anyhow::anyhow!("k_drop is not 32 bytes"))?;
 
     if !is_shielded_addr(&p.deposit_addr) {
-        anyhow::bail!("deposit_addr must be a shielded address (transparent t-addr drops the memo)");
+        anyhow::bail!(
+            "deposit_addr must be a shielded address (transparent t-addr drops the memo)"
+        );
     }
 
     Ok((
