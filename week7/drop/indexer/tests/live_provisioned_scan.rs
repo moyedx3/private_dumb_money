@@ -29,7 +29,7 @@ use drop_indexer::catalog::CatalogStore;
 use drop_indexer::dstack::Dstack;
 use drop_indexer::lightwalletd::GrpcClient;
 use drop_indexer::provision::seal_to_enclave;
-use drop_indexer::scan_loop::{scan_catalog_once, RuntimeScanConfig};
+use drop_indexer::scan_loop::{run_catalog_loop, scan_catalog_once, RuntimeScanConfig};
 use drop_indexer::server::{router, AppState};
 use drop_indexer::ProvisionPayload;
 use tower::ServiceExt;
@@ -185,5 +185,108 @@ async fn provisioned_catalog_live_scan_publishes_dispatch_route() -> Result<()> 
     );
 
     eprintln!("live provisioned scan ok: dispatch_key={key} dispatch_len=80");
+    Ok(())
+}
+
+#[tokio::test]
+#[ignore = "requires local UFVK and an already-mined memo-bearing payment block"]
+async fn automatic_background_loop_publishes_dispatch_after_provision() -> Result<()> {
+    load_dotenv();
+
+    let ufvk = required_env("A1_UFVK")?;
+    let start = required_env("A1_SCAN_START")?
+        .parse::<u64>()
+        .context("A1_SCAN_START must be a u64")?;
+    let end = env_u64("A1_SCAN_END")?.unwrap_or(start);
+    let drop_id = env_u64("A1_DEMO_DROP_ID")?.unwrap_or(1);
+    let price_zat = env_u64("A1_DEMO_PRICE_ZAT")?.unwrap_or(10_000);
+    let k_drop = env_hex_32("A1_DEMO_K_DROP_HEX")?.unwrap_or([9u8; 32]);
+    let deposit_addr =
+        env::var("A1_LIVE_DEPOSIT_ADDR").unwrap_or_else(|_| "u1liveprovisionedtest".into());
+    let endpoint = env::var("LIGHTWALLETD_URL").unwrap_or_else(|_| "https://zec.rocks:443".into());
+    let backup = env::var("LIGHTWALLETD_BACKUP_URL").ok();
+
+    let tmp = env::temp_dir().join(format!(
+        "drop-live-auto-provisioned-scan-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&tmp);
+    let catalog = CatalogStore::default();
+    let content = FsBucket::new(tmp.join("content"))?;
+    let dispatch = FsBucket::new(tmp.join("dispatch"))?;
+    let state = AppState::new(
+        Dstack::new("/nonexistent.sock"),
+        [7u8; 32],
+        catalog.clone(),
+        content,
+        dispatch.clone(),
+    );
+    let app = router(state);
+
+    let client = GrpcClient::new(endpoint, backup);
+    let loop_handle = tokio::spawn(run_catalog_loop(
+        client,
+        catalog,
+        dispatch,
+        RuntimeScanConfig {
+            poll_interval: std::time::Duration::from_millis(500),
+            batch_size: end.saturating_sub(start).saturating_add(1).max(1),
+            start_height: Some(start),
+        },
+    ));
+
+    let kp = provisioning_keypair_from_seed(&[7u8; 32]);
+    let payload = ProvisionPayload {
+        drop_id,
+        price_zat,
+        k_drop: hex::encode(k_drop),
+        creator_ufvk: ufvk,
+        h_content: "abcdef".into(),
+        deposit_addr,
+    };
+    let sealed = seal_to_enclave(&serde_json::to_vec(&payload)?, &kp.public_key);
+    let res = app
+        .clone()
+        .oneshot(
+            Request::post("/provision?title=Live")
+                .body(Body::from(sealed))
+                .unwrap(),
+        )
+        .await?;
+    assert_eq!(res.status(), 200, "provision should accept sealed payload");
+
+    let mut keys = Vec::<String>::new();
+    for _ in 0..20 {
+        let res = app
+            .clone()
+            .oneshot(Request::get("/dispatch").body(Body::empty()).unwrap())
+            .await?;
+        assert_eq!(res.status(), 200);
+        let body = axum::body::to_bytes(res.into_body(), usize::MAX).await?;
+        keys = serde_json::from_slice(&body)?;
+        if !keys.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    loop_handle.abort();
+
+    assert!(
+        !keys.is_empty(),
+        "automatic scanner loop should publish a dispatch after provision"
+    );
+    let key = &keys[0];
+    let res = app
+        .oneshot(
+            Request::get(format!("/dispatch/{key}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await?;
+    assert_eq!(res.status(), 200);
+    let blob = axum::body::to_bytes(res.into_body(), usize::MAX).await?;
+    assert_eq!(blob.len(), 80);
+
+    eprintln!("live automatic scan ok: dispatch_key={key} dispatch_len=80");
     Ok(())
 }
