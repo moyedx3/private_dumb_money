@@ -119,3 +119,45 @@ replay guard가 **순수 txid 기준**이고, 카탈로그/가격 체크보다 *
 - [ ] 10. `lib.rs:27` — `Debug` derive 제거
 
 > 참고: #3과 #8, #5가 서로 얽혀 있습니다. #3(상태 영속화)을 먼저 고치면 #8(재시작 재publish)의 트리거가 상당 부분 사라집니다.
+
+---
+
+## PoC 목표 기준 재검토 메모 — 2026-06-29
+
+> 기준: 현재 PoC 목표는 **TEE provision + 실제 Zcash memo 결제 감지 + buyer-specific dispatch blob 생성/해제**다.
+> 따라서 운영용 내구성, 장기 멀티테넌트, 장바구니/분할 결제까지 PR 전 필수로 보지는 않는다.
+> 특히 **#6 분할 결제는 현 PoC에서 지원하지 않아도 된다.**
+
+| # | 판정 | PoC 기준 판단 |
+| --- | --- | --- |
+| 1. `A2_DEV_PROVISIONING_SEED_HEX` | **수용 — PoC 전 수정 필요** | PoC 핵심 주장인 “host가 `k_drop`을 못 본다”를 깨뜨린다. TEE/dstack 환경에서는 env override가 있으면 부팅 거부하거나 dev-only cfg/feature 뒤로 숨겨야 한다. |
+| 2. txid replay guard가 multi-output 유실 | **보류** | 단일 buyer·단일 drop·단일 결제 note PoC에서는 필수 아님. 한 tx에서 여러 drop/note를 지원할 때 처리하면 된다. |
+| 3. scanner state 재시작 유실 | **조건부 보류** | 서버를 켠 뒤 `provision -> 결제 -> dispatch`를 보여주는 PoC라면 코드 수정 필수 아님. 대신 runbook에 재시작 시 re-provision 또는 `A1_SCAN_START` 재설정 필요를 명시해야 한다. 재시작 내구성을 데모 주장에 넣는다면 수정 필요. |
+| 4. provision 전 결제 skip | **거절/문서화** | 정상 PoC 플로우는 provision 이후 구매다. provision 전 결제는 비지원으로 두는 것이 단순하고 명확하다. |
+| 5. confirmation depth 없음 | **보류** | 운영 정확성 이슈다. PoC에서는 0-conf dispatch가 데모 속도에 유리하다. 실제 유료 공개 데모라면 `A1_MIN_CONFIRMATIONS` 옵션 추가 권장. |
+| 6. 분할 결제 거부 | **거절** | 현 PoC에서 분할 결제 지원 불필요. UI/문서에 “단일 결제 note가 `price_zat` 이상이어야 함”을 명시하면 충분하다. |
+| 7. 잘못된 UFVK 하나가 전체 scan 중단 | **부분 수용 — 가벼운 수정 권장** | 멀티테넌트 운영 방어라기보다 PoC 안정성 문제다. C/UI가 placeholder UFVK를 넣으면 전체 데모가 멈출 수 있으므로 `/provision` 시 UFVK 파싱 검증 후 invalid면 400을 반환하는 최소 조치가 적절하다. 드롭별 오류 격리는 후속 가능. |
+| 8. random blob_key로 dispatch 증가 | **보류** | 재시작/재스캔 반복 시 운영 비용 문제다. 단일 PoC 경로에서는 buyer trial-open으로 기능은 동작한다. #3을 운영 수준으로 고칠 때 같이 보면 된다. |
+| 9. memo magic prefix 없음 | **거절** | 현재 `interfaces.md`와 B/C test vector가 raw40 또는 `A1B64:`로 고정되어 있다. 지금 magic prefix를 추가하면 PoC 호환성을 깨므로 후속 v2 포맷에서 논의한다. |
+| 10. `DropConfig: Debug`로 secret 로그 가능 | **수용 — 작은 하드닝** | 직접 로그가 없어도 `k_drop` 비노출은 PoC 핵심 체크리스트다. 비용이 낮으므로 `Debug` derive 제거 또는 redacted Debug 구현을 권장한다. |
+
+### PoC 전 권장 수정
+
+1. **#1** provisioning seed env override를 TEE 환경에서 차단/제한한다.
+2. **#7** `/provision`에서 malformed `creator_ufvk`를 조기에 거부한다.
+3. **#10** `DropConfig`의 secret-bearing `Debug` 출력을 제거하거나 redaction한다.
+
+### 문서화로 충분한 비지원 범위
+
+- **#3** 재시작 시 scanner/cursor 내구성은 보장하지 않음. 필요 시 re-provision 또는 `A1_SCAN_START` 재설정.
+- **#4** provision 이전 결제는 지원하지 않음.
+- **#6** 분할 결제는 지원하지 않음. 단일 note가 가격 이상이어야 함.
+
+### 후속 운영 과제
+
+- **#2** multi-output/multi-drop tx 처리
+- **#5** confirmation depth / reorg 대응
+- **#8** deterministic dispatch key
+- **#9** memo v2 magic/versioning
+
+결론: 원 리뷰의 “Critical + High 전부 PR 전 필수”는 현 PoC 기준으로 과하다. PoC merge gate로는 **#1, #7, #10만 수용**하고, **#6은 명시적으로 제외**하는 판단이 맞다.
