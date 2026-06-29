@@ -13,7 +13,8 @@ export const CatalogResponseSchema = z.array(
     drop_id: z.number().int().nonnegative().safe(),
     price_zec: z.string().min(1),
     h_content: z.string().regex(SHA256_HEX_PATTERN),
-    title: z.string()
+    title: z.string(),
+    deposit_addr: z.string().min(1)
   })
 );
 

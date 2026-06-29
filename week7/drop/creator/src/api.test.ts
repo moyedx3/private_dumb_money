@@ -27,9 +27,10 @@ describe("catalog interface", () => {
       drop_id: 1,
       price_zec: "0.01",
       h_content: "a".repeat(64),
-      title: "demo"
+      title: "demo",
+      deposit_addr: "u1shieldedreceiver"
     };
-    expect(Object.keys(entry).sort()).toEqual(["drop_id", "h_content", "price_zec", "title"]);
+    expect(Object.keys(entry).sort()).toEqual(["deposit_addr", "drop_id", "h_content", "price_zec", "title"]);
   });
 });
 
@@ -58,10 +59,21 @@ describe("attest API boundary", () => {
 describe("catalog API boundary", () => {
   it("rejects malformed catalog response", async () => {
     stubFetch(async () =>
-      new Response(JSON.stringify([{ drop_id: 1, price_zec: "0.01", h_content: "not-hex", title: "demo" }]), {
-        headers: { "content-type": "application/json" },
-        status: 200
-      }));
+      new Response(
+        JSON.stringify([
+          {
+            drop_id: 1,
+            price_zec: "0.01",
+            h_content: "not-hex",
+            title: "demo",
+            deposit_addr: "u1shieldedreceiver"
+          }
+        ]),
+        {
+          headers: { "content-type": "application/json" },
+          status: 200
+        }
+      ));
 
     await expect(fetchCatalog("https://indexer.example")).rejects.toThrow(/catalog/i);
   });

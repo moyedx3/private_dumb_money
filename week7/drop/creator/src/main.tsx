@@ -36,6 +36,7 @@ function App() {
   const [dropId, setDropId] = useState("1");
   const [priceZec, setPriceZec] = useState("0.01");
   const [creatorUfvk, setCreatorUfvk] = useState("");
+  const [depositAddr, setDepositAddr] = useState("");
   const [textContent, setTextContent] = useState("Hello from a locally encrypted drop.");
   const [file, setFile] = useState<File | null>(null);
   const [steps, setSteps] = useState<Steps>({ encrypt: "idle", attest: "idle", provision: "idle" });
@@ -53,9 +54,10 @@ function App() {
           dropId.trim() &&
           priceZec.trim() &&
           creatorUfvk.trim() &&
+          depositAddr.trim() &&
           (file || textContent.trim())
       ),
-    [creatorUfvk, dropId, expectedMeasurement, file, indexerUrl, priceZec, textContent, title]
+    [creatorUfvk, depositAddr, dropId, expectedMeasurement, file, indexerUrl, priceZec, textContent, title]
   );
 
   async function submit() {
@@ -89,7 +91,8 @@ function App() {
           priceZat: validated.priceZat,
           kDrop: encrypted.kDrop,
           creatorUfvk,
-          hContent: encrypted.hContent
+          hContent: encrypted.hContent,
+          depositAddr
         });
         const sealedPayload = await sealProvisionPayload(payload, enclavePubkey);
         await postProvision(indexerUrl, title, sealedPayload);
@@ -162,6 +165,10 @@ function App() {
           <label className="field">
             Creator UFVK
             <textarea value={creatorUfvk} onChange={(e) => setCreatorUfvk(e.target.value)} rows={3} />
+          </label>
+          <label className="field">
+            Shielded deposit address
+            <textarea value={depositAddr} onChange={(e) => setDepositAddr(e.target.value)} rows={3} />
           </label>
         </div>
 

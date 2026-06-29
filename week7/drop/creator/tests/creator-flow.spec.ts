@@ -262,6 +262,7 @@ async function fillCreatorForm(page: Page): Promise<void> {
   await page.getByLabel("Price ZEC").fill("0.01");
   await page.getByLabel("Title").fill("Route mocked drop");
   await page.getByLabel("Creator UFVK").fill("uview1routefixture");
+  await page.getByLabel("Shielded deposit address").fill("u1shieldedroutefixture");
   await page.getByLabel("Text fallback").fill("browser route mock content");
 }
 

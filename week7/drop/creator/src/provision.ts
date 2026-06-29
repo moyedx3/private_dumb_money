@@ -8,6 +8,7 @@ export type ProvisionPayload = {
   k_drop: string;
   creator_ufvk: string;
   h_content: string;
+  deposit_addr: string;
 };
 
 export function parseDropId(input: string): number {
@@ -30,12 +31,24 @@ export function parseProvisioningPubkey(input: string): Uint8Array {
   return fromHex(trimmed);
 }
 
+export function parseShieldedDepositAddress(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed) {
+    throw new Error("deposit_addr is required");
+  }
+  if (trimmed.startsWith("t")) {
+    throw new Error("deposit_addr must be shielded; transparent t-addrs cannot carry buyer memos");
+  }
+  return trimmed;
+}
+
 export function buildProvisionPayload(args: {
   dropId: number;
   priceZat: number;
   kDrop: Uint8Array;
   creatorUfvk: string;
   hContent: string;
+  depositAddr: string;
 }): ProvisionPayload {
   if (!Number.isSafeInteger(args.dropId) || args.dropId < 0) {
     throw new Error("drop_id must be a non-negative safe integer");
@@ -50,12 +63,14 @@ export function buildProvisionPayload(args: {
     throw new Error("creator_ufvk is required");
   }
   const hContent = parseSha256Hex(args.hContent);
+  const depositAddr = parseShieldedDepositAddress(args.depositAddr);
   return {
     drop_id: args.dropId,
     price_zat: args.priceZat,
     k_drop: toHex(args.kDrop),
     creator_ufvk: args.creatorUfvk.trim(),
-    h_content: hContent
+    h_content: hContent,
+    deposit_addr: depositAddr
   };
 }
 

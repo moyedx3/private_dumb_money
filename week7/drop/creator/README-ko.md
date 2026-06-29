@@ -1,6 +1,6 @@
 # Lane C — Creator Web App
 
-크리에이터가 보는 화면 전부. 콘텐츠 파일 선택 → 드롭마다 새 `K_drop` 생성 → AES-256-GCM 암호화 → 버킷 업로드 → `GET /attest` quote 검증 → 검증된 enclave 공개키로 `K_drop`/UFVK 봉인 → `POST /provision` → 공개 카탈로그 등록.
+크리에이터가 보는 화면 전부. 콘텐츠 파일 선택 → 드롭마다 새 `K_drop` 생성 → AES-256-GCM 암호화 → 버킷 업로드 → `GET /attest` quote 검증 → 검증된 enclave 공개키로 `K_drop`/UFVK/입금 주소 봉인 → `POST /provision` → 공개 카탈로그 등록.
 
 스펙: [`../team/lane-C-creator-app.md`](../team/lane-C-creator-app.md) · 계약: [`../team/interfaces.md`](../team/interfaces.md) · 디자인: [`./DESIGN.md`](./DESIGN.md)
 
@@ -10,7 +10,7 @@
 npm install
 npx playwright install chromium
 npm run dev      # 127.0.0.1:5173
-npm test         # vitest (28 tests)
+npm test         # vitest
 npm run build    # tsc + vite build
 ```
 
@@ -44,7 +44,7 @@ npm run build    # tsc + vite build
 │                         └──────────────▶ POST /provision      │
 │                                                              │
 │ ④ 공개 카탈로그 등록                                          │
-│    { drop_id, price_zec, h_content, title }                   │
+│    { drop_id, price_zec, h_content, title, deposit_addr }      │
 │                         └──────────────▶ public catalog       │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -55,14 +55,15 @@ npm run build    # tsc + vite build
 
 | 인터페이스 | 형식 | 파일 |
 |---|---|---|
-| I3-a catalog | `{ drop_id, price_zec, h_content, title }` — 공개, 비밀 없음 | `api.ts` |
+| I3-a catalog | `{ drop_id, price_zec, h_content, title, deposit_addr }` — 공개, 비밀 없음 | `api.ts` |
 | I4 content blob | `nonce(12) ‖ AES-256-GCM ciphertext ‖ tag(16)`, `h_content=sha256(blob)` | `content.ts` |
-| I5 provision | `POST /provision`, sealed JSON `{ drop_id, price_zat, k_drop, creator_ufvk, h_content }` | `provision.ts` |
+| I5 provision | `POST /provision`, sealed JSON `{ drop_id, price_zat, k_drop, creator_ufvk, h_content, deposit_addr }` | `provision.ts` |
 | I6 attest | `{ quote_hex, provisioning_pubkey_hex }`를 Zod로 파싱 후 quote verifier 결과와 바인딩 검사 | `api.ts`, `attestation.ts` |
 
 - `price_zec`는 사람이 보는 문자열 단위다. `price_zat`는 enclave가 계산하는 zatoshi 정수다. `price.ts`가 변환을 맡고 테스트가 소수점/안전정수 경계를 고정한다.
 - I4는 Buyer 앱의 `content.ts`와 같은 분해 규칙을 쓴다. 앞 12바이트가 nonce, WebCrypto 결과의 뒤 16바이트가 tag다.
 - JSON에는 byte 타입이 없어서 I5 payload의 `k_drop`은 32 raw bytes를 64자 hex 문자열로 넣는다. sealed box 밖으로는 평문 `k_drop`이 나오지 않는다.
+- `deposit_addr`는 구매자 메모를 받을 수 있는 shielded 주소여야 한다. transparent `t...` 주소는 A2와 동일하게 sealing 전에 거부한다.
 
 ## 파일 맵
 
