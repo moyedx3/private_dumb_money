@@ -312,7 +312,7 @@ where
             .saturating_add(cfg.batch_size.saturating_sub(1))
             .min(tip);
 
-        let mut engine = Engine::new(catalog.clone(), dispatch.clone());
+        let mut engine = Engine::new(catalog.clone(), dispatch.clone(), ufvk.clone());
         let summary =
             scan_once_with_state(client, &ufvk, &network, start, end, state, &mut engine).await?;
         out.push(summary);
@@ -397,9 +397,11 @@ mod tests {
         }
     }
 
+    type MockPuts = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
+
     #[derive(Clone, Default)]
     struct MockBucket {
-        puts: Arc<Mutex<Vec<(String, Vec<u8>)>>>,
+        puts: MockPuts,
     }
 
     impl MockBucket {
@@ -451,6 +453,7 @@ mod tests {
                 k_drop: [9u8; 32],
             },
             bucket,
+            "uview1mock",
         )
     }
 

@@ -57,14 +57,16 @@ pub struct Engine<C: Catalog, B: Bucket> {
     cat: C,
     bucket: B,
     seen: SeenTxids,
+    scanned_ufvk: String,
 }
 
 impl<C: Catalog, B: Bucket> Engine<C, B> {
-    pub fn new(cat: C, bucket: B) -> Self {
+    pub fn new(cat: C, bucket: B, scanned_ufvk: impl Into<String>) -> Self {
         Self {
             cat,
             bucket,
             seen: SeenTxids::default(),
+            scanned_ufvk: scanned_ufvk.into(),
         }
     }
 
@@ -88,6 +90,14 @@ impl<C: Catalog, B: Bucket> Engine<C, B> {
             );
             return Ok(None);
         };
+
+        if cfg.creator_ufvk != self.scanned_ufvk {
+            tracing::warn!(
+                drop_id = n.drop_id,
+                "memo drop_id belongs to a different creator than the paid UFVK; skipping dispatch"
+            );
+            return Ok(None);
+        }
 
         if n.value_zat < cfg.price_zat {
             tracing::warn!(
@@ -126,6 +136,7 @@ mod tests {
         drop_id: u64,
         price_zat: u64,
         k_drop: [u8; 32],
+        creator_ufvk: String,
     }
 
     impl Catalog for MockCatalog {
@@ -133,16 +144,18 @@ mod tests {
             (drop_id == self.drop_id).then(|| DropConfig {
                 price_zat: self.price_zat,
                 k_drop: self.k_drop,
-                creator_ufvk: "uview1mock".to_string(),
+                creator_ufvk: self.creator_ufvk.clone(),
                 h_content: "abc123".to_string(),
                 deposit_addr: "u1mockshielded".to_string(),
             })
         }
     }
 
+    type MockPuts = Arc<Mutex<Vec<(String, Vec<u8>)>>>;
+
     #[derive(Clone, Default)]
     struct MockBucket {
-        puts: Arc<Mutex<Vec<(String, Vec<u8>)>>>,
+        puts: MockPuts,
     }
 
     impl MockBucket {
@@ -207,9 +220,10 @@ mod tests {
             drop_id: 1,
             price_zat: 10_000,
             k_drop: [9u8; 32],
+            creator_ufvk: "uview1mock".to_string(),
         };
         let bucket = MockBucket::default();
-        let mut eng = Engine::new(cat, bucket.clone());
+        let mut eng = Engine::new(cat, bucket.clone(), "uview1mock");
         let e_pub = buyer_epub();
 
         let dispatched = eng
@@ -246,9 +260,10 @@ mod tests {
             drop_id: 1,
             price_zat: 10_000,
             k_drop: [9u8; 32],
+            creator_ufvk: "uview1mock".to_string(),
         };
         let bucket = MockBucket::default();
-        let mut eng = Engine::new(cat, bucket.clone());
+        let mut eng = Engine::new(cat, bucket.clone(), "uview1mock");
         let note = Note {
             drop_id: 1,
             e_pub: buyer_epub(),
@@ -267,9 +282,10 @@ mod tests {
             drop_id: 1,
             price_zat: 10_000,
             k_drop: [9u8; 32],
+            creator_ufvk: "uview1mock".to_string(),
         };
         let bucket = MockBucket::default();
-        let mut eng = Engine::new(cat, bucket.clone());
+        let mut eng = Engine::new(cat, bucket.clone(), "uview1mock");
 
         let result = eng
             .on_note(&Note {
@@ -282,6 +298,32 @@ mod tests {
             .unwrap();
 
         assert!(result.is_none());
+        assert_eq!(bucket.count(), 0);
+    }
+    #[tokio::test]
+    async fn refuses_dispatch_for_drop_owned_by_different_scanned_ufvk() {
+        let cat = MockCatalog {
+            drop_id: 1,
+            price_zat: 10_000,
+            k_drop: [9u8; 32],
+            creator_ufvk: "uview1victim".to_string(),
+        };
+        let bucket = MockBucket::default();
+        let mut eng = Engine::new(cat, bucket.clone(), "uview1attacker");
+        let buyer = StackKeyPair::gen();
+        let e_pub = *buyer.public_key.as_array();
+
+        let out = eng
+            .on_note(&Note {
+                drop_id: 1,
+                e_pub,
+                value_zat: 10_000,
+                txid: [7u8; 32],
+            })
+            .await
+            .unwrap();
+
+        assert!(out.is_none());
         assert_eq!(bucket.count(), 0);
     }
 }

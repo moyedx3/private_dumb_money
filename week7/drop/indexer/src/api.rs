@@ -387,7 +387,7 @@ mod tests {
         let buyer = StackKeyPair::gen();
         let e_pub = *buyer.public_key.as_array();
 
-        let mut engine = Engine::new(api.clone(), api.clone());
+        let mut engine = Engine::new(api.clone(), api.clone(), "uview1test");
         let dispatch = engine
             .on_note(&Note {
                 drop_id: drop.drop_id,

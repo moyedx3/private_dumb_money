@@ -87,10 +87,14 @@ async fn provision_h(
 ) -> StatusCode {
     match open_provision(&body, &s.inner.kp) {
         Ok((drop_id, cfg)) => {
-            s.inner
+            match s
+                .inner
                 .catalog
-                .insert(drop_id, cfg, q.title.unwrap_or_else(|| "untitled".into()));
-            StatusCode::OK
+                .insert(drop_id, cfg, q.title.unwrap_or_else(|| "untitled".into()))
+            {
+                Ok(()) => StatusCode::OK,
+                Err(_) => StatusCode::CONFLICT,
+            }
         }
         Err(_) => StatusCode::BAD_REQUEST,
     }
@@ -144,9 +148,22 @@ async fn dispatch_get_h(
 mod tests {
     use super::*;
     use crate::provision::seal_to_enclave;
+
+    const VALID_UFVK: &str = "uview12z384wdq76ceewlsu0esk7d97qnd23v2qnvhujxtcf2lsq8g4hwzpx44fwxssnm5tg8skyh4tnc8gydwxefnnm0hd0a6c6etmj0pp9jqkdsllkr70u8gpf7ndsfqcjlqn6dec3faumzqlqcmtjf8vp92h7kj38ph2786zx30hq2wru8ae3excdwc8w0z3t9fuw7mt7xy5sn6s4e45kwm0cjp70wytnensgdnev286t3vew3yuwt2hcz865y037k30e428dvgne37xvyeal2vu8yjnznphf9t2rw3gdp0hk5zwq00ws8f3l3j5n3qkqgsyzrwx4qzmgq0xwwk4vz2r6vtsykgz089jncvycmem3535zjwvvtvjw8v98y0d5ydwte575gjm7a7k";
     use axum::body::Body;
     use axum::http::Request;
     use tower::ServiceExt;
+
+    fn generated_ufvk(seed_tag: u8) -> String {
+        zcash_keys::keys::UnifiedSpendingKey::from_seed(
+            &zcash_protocol::consensus::MAIN_NETWORK,
+            &[seed_tag; 32],
+            zip32::AccountId::ZERO,
+        )
+        .expect("valid seed")
+        .to_unified_full_viewing_key()
+        .encode(&zcash_protocol::consensus::MAIN_NETWORK)
+    }
 
     fn test_state(seed: [u8; 32]) -> AppState {
         let base = std::env::temp_dir().join(format!("drop-srv-test-{}", seed[0]));
@@ -170,7 +187,7 @@ mod tests {
             drop_id: 1,
             price_zat: 500,
             k_drop: hex::encode([2u8; 32]),
-            creator_ufvk: "uview1secret".into(),
+            creator_ufvk: VALID_UFVK.into(),
             h_content: "h1".into(),
             deposit_addr: "u1demo".into(),
         };
@@ -199,7 +216,7 @@ mod tests {
         assert!(s.contains("\"drop_id\":1"));
         assert!(s.contains("\"price_zec\":\"0.000005\""));
         assert!(s.contains("Cat"));
-        assert!(!s.contains("uview1secret")); // secrets stay internal
+        assert!(!s.contains(VALID_UFVK)); // secrets stay internal
         assert!(s.contains("u1demo")); // deposit_addr surfaces in the public catalog (R-A2-2)
     }
 
@@ -214,7 +231,7 @@ mod tests {
                 drop_id: 1,
                 price_zat: price,
                 k_drop: hex::encode([2u8; 32]),
-                creator_ufvk: "uview1x".into(),
+                creator_ufvk: VALID_UFVK.into(),
                 h_content: "h1".into(),
                 deposit_addr: "u1demo".into(),
             };
@@ -242,6 +259,59 @@ mod tests {
         let s = String::from_utf8(body.to_vec()).unwrap();
         assert!(s.contains("\"price_zec\":\"0.000007\"")); // latest wins
         assert_eq!(s.matches("\"drop_id\":1").count(), 1); // exactly one entry
+    }
+
+    #[tokio::test]
+    async fn provision_rejects_different_creator_overwriting_existing_drop() {
+        let st = test_state([9u8; 32]);
+        let app = router(st);
+        let kp = crate::attest::provisioning_keypair_from_seed(&[9u8; 32]);
+
+        let seal = |creator_ufvk: &str, deposit_addr: &str| {
+            let payload = crate::ProvisionPayload {
+                drop_id: 1,
+                price_zat: 500,
+                k_drop: hex::encode([2u8; 32]),
+                creator_ufvk: creator_ufvk.into(),
+                h_content: "h1".into(),
+                deposit_addr: deposit_addr.into(),
+            };
+            seal_to_enclave(&serde_json::to_vec(&payload).unwrap(), &kp.public_key)
+        };
+
+        let first = app
+            .clone()
+            .oneshot(
+                Request::post("/provision?title=Cat")
+                    .body(Body::from(seal(VALID_UFVK, "u1victim")))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+
+        let attacker_ufvk = generated_ufvk(2);
+        let hijack = app
+            .clone()
+            .oneshot(
+                Request::post("/provision?title=Evil")
+                    .body(Body::from(seal(&attacker_ufvk, "u1attacker")))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(hijack.status(), StatusCode::CONFLICT);
+
+        let cat = app
+            .oneshot(Request::get("/catalog").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let body = axum::body::to_bytes(cat.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let s = std::str::from_utf8(&body).unwrap();
+        assert!(s.contains("u1victim"));
+        assert!(!s.contains("u1attacker"));
     }
 
     #[tokio::test]

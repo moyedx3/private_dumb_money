@@ -46,6 +46,20 @@ pub fn infer_network_from_ufvk(ufvk: &str) -> Result<Network> {
     }
 }
 
+/// Validate that a provisioned creator UFVK is syntactically decodable and
+/// contains at least one shielded viewing key usable by the scanner.
+pub fn validate_ufvk(ufvk: &str) -> Result<()> {
+    let network = infer_network_from_ufvk(ufvk)?;
+    let decoded = UnifiedFullViewingKey::decode(&network, ufvk)
+        .map_err(|e| anyhow!("UFVK decode failed: {e}"))?;
+
+    if decoded.sapling().is_none() && decoded.orchard().is_none() {
+        return Err(anyhow!("UFVK carries neither a Sapling nor an Orchard key"));
+    }
+
+    Ok(())
+}
+
 /// Convert explorer/display txid hex (big-endian) to lightwalletd txid bytes.
 pub fn display_txid_to_lightwalletd_bytes(txid_hex: &str) -> Result<[u8; 32]> {
     let s = txid_hex

@@ -175,7 +175,7 @@ async fn main() -> Result<()> {
         k_drop: demo_k_drop,
         creator_ufvk: ufvk.clone(),
     };
-    let mut engine = Engine::new(catalog, LoggingBucket);
+    let mut engine = Engine::new(catalog, LoggingBucket, ufvk.clone());
 
     let summary = if let Some(path) = state_file {
         let key = env_required("A1_STATE_KEY_HEX").context(
