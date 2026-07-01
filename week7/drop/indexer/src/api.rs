@@ -48,7 +48,7 @@ pub fn endpoint_vector() -> Vec<ApiEndpoint> {
     ]
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct RegisterCreatorDropRequest {
     pub creator_id: String,
     pub creator_ufvk: String,
@@ -56,6 +56,22 @@ pub struct RegisterCreatorDropRequest {
     pub price_zat: u64,
     pub k_drop: [u8; 32],
     pub h_content: String,
+}
+
+// Hand-written Debug so a stray {:?}/trace on this request cannot leak the content master
+// key (k_drop) or the creator viewing key (creator_ufvk) into host-visible logs. Mirrors the
+// DropConfig redaction (Task 2). ApiVectors is a dev/test adapter, but the leak class is closed.
+impl std::fmt::Debug for RegisterCreatorDropRequest {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RegisterCreatorDropRequest")
+            .field("creator_id", &self.creator_id)
+            .field("creator_ufvk", &"[redacted]")
+            .field("deposit_addr", &self.deposit_addr)
+            .field("price_zat", &self.price_zat)
+            .field("k_drop", &"[redacted]")
+            .field("h_content", &self.h_content)
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -440,5 +456,28 @@ mod tests {
     fn missing_dispatch_returns_none() {
         let api = ApiVectors::new();
         assert!(api.lookup_dispatch("missing").is_none());
+    }
+
+    #[test]
+    fn register_request_debug_redacts_secrets() {
+        let req = RegisterCreatorDropRequest {
+            creator_id: "creator-1".into(),
+            creator_ufvk: "uview1secret".into(),
+            deposit_addr: "u1demo".into(),
+            price_zat: 500,
+            k_drop: [0xAB; 32],
+            h_content: "h1".into(),
+        };
+        let s = format!("{req:?}");
+
+        // secrets must NOT appear
+        assert!(s.contains("redacted"), "Debug must redact secret fields: {s}");
+        assert!(!s.contains("uview1secret"), "creator_ufvk leaked into Debug: {s}");
+        // [u8; 32] derived Debug prints DECIMAL ("[171, 171, ...]", 0xAB = 171), never hex.
+        assert!(!s.contains("171, 171"), "k_drop bytes leaked into Debug: {s}");
+
+        // non-secret fields stay visible for diagnostics
+        assert!(s.contains("creator-1"), "creator_id should remain visible: {s}");
+        assert!(s.contains("u1demo"), "deposit_addr should remain visible: {s}");
     }
 }
