@@ -17,6 +17,7 @@ use dryoc::constants::CRYPTO_BOX_SEALBYTES;
 use dryoc::keypair::StackKeyPair;
 use zeroize::Zeroize;
 
+use crate::detect::validate_ufvk;
 use crate::{DropConfig, ProvisionPayload};
 
 /// dryoc keys (`StackByteArray<32>`) deref to `&[u8]`; copy into a fixed `[u8; 32]`.
@@ -58,8 +59,11 @@ pub fn open_provision(sealed: &[u8], kp: &StackKeyPair) -> anyhow::Result<(u64, 
     let k_drop = k_drop_res.map_err(|_| anyhow::anyhow!("k_drop is not 32 bytes"))?;
 
     if !is_shielded_addr(&p.deposit_addr) {
-        anyhow::bail!("deposit_addr must be a shielded address (transparent t-addr drops the memo)");
+        anyhow::bail!(
+            "deposit_addr must be a shielded address (transparent t-addr drops the memo)"
+        );
     }
+    validate_ufvk(&p.creator_ufvk)?;
 
     Ok((
         p.drop_id,
@@ -87,6 +91,8 @@ mod tests {
     use super::*;
     use dryoc::classic::crypto_box::crypto_box_seal;
 
+    const VALID_UFVK: &str = "uview12z384wdq76ceewlsu0esk7d97qnd23v2qnvhujxtcf2lsq8g4hwzpx44fwxssnm5tg8skyh4tnc8gydwxefnnm0hd0a6c6etmj0pp9jqkdsllkr70u8gpf7ndsfqcjlqn6dec3faumzqlqcmtjf8vp92h7kj38ph2786zx30hq2wru8ae3excdwc8w0z3t9fuw7mt7xy5sn6s4e45kwm0cjp70wytnensgdnev286t3vew3yuwt2hcz865y037k30e428dvgne37xvyeal2vu8yjnznphf9t2rw3gdp0hk5zwq00ws8f3l3j5n3qkqgsyzrwx4qzmgq0xwwk4vz2r6vtsykgz089jncvycmem3535zjwvvtvjw8v98y0d5ydwte575gjm7a7k";
+
     /// Simulate Lane C: libsodium `crypto_box_seal` of `msg` to the enclave pubkey.
     fn creator_seal(msg: &[u8], kp: &StackKeyPair) -> Vec<u8> {
         let pk = key_bytes(&kp.public_key);
@@ -102,7 +108,7 @@ mod tests {
             drop_id: 1,
             price_zat: 1_000_000,
             k_drop: hex::encode([0xAB; 32]),
-            creator_ufvk: "uview1demo".into(),
+            creator_ufvk: VALID_UFVK.into(),
             h_content: "abc123".into(),
             deposit_addr: "u1demo".into(),
         };
@@ -113,7 +119,7 @@ mod tests {
         assert_eq!(drop_id, 1);
         assert_eq!(cfg.price_zat, 1_000_000);
         assert_eq!(cfg.k_drop, [0xAB; 32]);
-        assert_eq!(cfg.creator_ufvk, "uview1demo");
+        assert_eq!(cfg.creator_ufvk, VALID_UFVK);
         assert_eq!(cfg.h_content, "abc123");
         assert_eq!(cfg.deposit_addr, "u1demo");
 
@@ -131,9 +137,24 @@ mod tests {
             drop_id: 1,
             price_zat: 500,
             k_drop: hex::encode([2u8; 32]),
-            creator_ufvk: "uview1x".into(),
+            creator_ufvk: VALID_UFVK.into(),
             h_content: "h1".into(),
             deposit_addr: "t1ExampleTransparentAddress".into(),
+        };
+        let sealed = creator_seal(&serde_json::to_vec(&payload).unwrap(), &kp);
+        assert!(open_provision(&sealed, &kp).is_err());
+    }
+
+    #[test]
+    fn provision_rejects_malformed_creator_ufvk() {
+        let kp = crate::attest::provisioning_keypair_from_seed(&[7u8; 32]);
+        let payload = crate::ProvisionPayload {
+            drop_id: 1,
+            price_zat: 500,
+            k_drop: hex::encode([2u8; 32]),
+            creator_ufvk: "uview1not-a-real-key".into(),
+            h_content: "h1".into(),
+            deposit_addr: "u1shieldedunifiedaddress".into(),
         };
         let sealed = creator_seal(&serde_json::to_vec(&payload).unwrap(), &kp);
         assert!(open_provision(&sealed, &kp).is_err());
@@ -146,7 +167,7 @@ mod tests {
             drop_id: 1,
             price_zat: 500,
             k_drop: hex::encode([2u8; 32]),
-            creator_ufvk: "uview1x".into(),
+            creator_ufvk: VALID_UFVK.into(),
             h_content: "h1".into(),
             deposit_addr: "u1shieldedunifiedaddress".into(),
         };

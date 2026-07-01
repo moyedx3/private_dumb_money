@@ -27,7 +27,9 @@ pub struct Dstack {
 
 impl Dstack {
     pub fn new(socket: impl Into<String>) -> Self {
-        Self { socket: socket.into() }
+        Self {
+            socket: socket.into(),
+        }
     }
 
     /// Request a TDX quote binding `report_data` (zero-padded to 64 bytes). Returns the quote hex.
@@ -41,10 +43,14 @@ impl Dstack {
     pub async fn info_mrtd(&self) -> Result<String> {
         let resp = post_uds_json(&self.socket, "/Info", &serde_json::json!({})).await?;
         // dstack quirk: `tcb_info` is a JSON-encoded *string*, not an object.
-        let tcb = resp.get("tcb_info").and_then(|v| v.as_str())
+        let tcb = resp
+            .get("tcb_info")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("dstack /Info: missing 'tcb_info'"))?;
         let tcb: serde_json::Value = serde_json::from_str(tcb)?;
-        tcb.get("mrtd").and_then(|v| v.as_str()).map(|s| s.to_string())
+        tcb.get("mrtd")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
             .ok_or_else(|| anyhow!("dstack /Info: missing 'mrtd'"))
     }
 
@@ -52,17 +58,29 @@ impl Dstack {
     /// against the v0.5.3 simulator — response `{ key: <64-hex>, signature_chain: [...] }`).
     /// Stable per measurement → used as the provisioning keypair seed. Changes on rebuild (C4).
     pub async fn get_key(&self, path: &str) -> Result<[u8; 32]> {
-        let resp = post_uds_json(&self.socket, "/GetKey", &serde_json::json!({ "path": path })).await?;
-        let hexk = resp.get("key").and_then(|v| v.as_str())
+        let resp = post_uds_json(
+            &self.socket,
+            "/GetKey",
+            &serde_json::json!({ "path": path }),
+        )
+        .await?;
+        let hexk = resp
+            .get("key")
+            .and_then(|v| v.as_str())
             .ok_or_else(|| anyhow!("dstack /GetKey: missing 'key'"))?;
         let raw = hex::decode(hexk)?;
-        raw.as_slice().try_into()
+        raw.as_slice()
+            .try_into()
             .map_err(|_| anyhow!("dstack key not 32 bytes (got {})", raw.len()))
     }
 }
 
 /// Minimal HTTP/1.1 POST with a JSON body over a unix socket; parse the JSON response.
-async fn post_uds_json(socket: &str, path: &str, body: &serde_json::Value) -> Result<serde_json::Value> {
+async fn post_uds_json(
+    socket: &str,
+    path: &str,
+    body: &serde_json::Value,
+) -> Result<serde_json::Value> {
     let socket = socket.to_string();
     let path = path.to_string();
     let body = body.to_string();
@@ -108,7 +126,8 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn live_simulator_returns_quote() {
-        let sock = std::env::var("DSTACK_SOCKET").expect("set DSTACK_SOCKET to the simulator socket");
+        let sock =
+            std::env::var("DSTACK_SOCKET").expect("set DSTACK_SOCKET to the simulator socket");
         let ds = Dstack::new(sock);
         let q = ds.get_quote(&[1u8; 32]).await.unwrap();
         assert!(!q.is_empty());
@@ -117,7 +136,8 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn live_simulator_derives_stable_key() {
-        let sock = std::env::var("DSTACK_SOCKET").expect("set DSTACK_SOCKET to the simulator socket");
+        let sock =
+            std::env::var("DSTACK_SOCKET").expect("set DSTACK_SOCKET to the simulator socket");
         let ds = Dstack::new(sock);
         let a = ds.get_key("drop/provisioning").await.unwrap();
         let b = ds.get_key("drop/provisioning").await.unwrap();

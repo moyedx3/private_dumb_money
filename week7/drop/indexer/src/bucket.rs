@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use crate::Bucket;
 
 /// Filesystem bucket. Keys must be safe filenames (our keys are hex).
+#[derive(Clone)]
 pub struct FsBucket {
     dir: PathBuf,
 }
@@ -68,7 +69,10 @@ mod tests {
         let b = FsBucket::new(&dir).unwrap();
 
         b.put("deadbeef", b"hello").await.unwrap(); // keys are hex blob hashes
-        assert_eq!(b.get("deadbeef").await.unwrap().as_deref(), Some(&b"hello"[..]));
+        assert_eq!(
+            b.get("deadbeef").await.unwrap().as_deref(),
+            Some(&b"hello"[..])
+        );
         assert_eq!(b.get("cafe").await.unwrap(), None); // valid hex, not present
         assert_eq!(b.list().await.unwrap(), vec!["deadbeef".to_string()]);
     }
@@ -84,14 +88,24 @@ mod tests {
         // keys are hex (blob hashes). Anything else — traversal, slashes, dots — must be refused
         // and must never touch the filesystem outside the bucket dir.
         for bad in ["../escape", "..", "a/b", "k1.txt", "/etc/passwd", ""] {
-            assert!(b.put(bad, b"x").await.is_err(), "put({bad:?}) should be rejected");
-            assert_eq!(b.get(bad).await.unwrap(), None, "get({bad:?}) should be None");
+            assert!(
+                b.put(bad, b"x").await.is_err(),
+                "put({bad:?}) should be rejected"
+            );
+            assert_eq!(
+                b.get(bad).await.unwrap(),
+                None,
+                "get({bad:?}) should be None"
+            );
         }
         // proof the rejected "../escape" never wrote outside the bucket dir
         assert!(!root.join("escape").exists());
 
         // a valid hex key still works
         b.put("deadbeef", b"ok").await.unwrap();
-        assert_eq!(b.get("deadbeef").await.unwrap().as_deref(), Some(&b"ok"[..]));
+        assert_eq!(
+            b.get("deadbeef").await.unwrap().as_deref(),
+            Some(&b"ok"[..])
+        );
     }
 }

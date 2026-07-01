@@ -1,3 +1,7 @@
+# Local env/build artifacts
+.env
+indexer/target/
+
 # Local agent artifacts
 /.omo/
 /creator/.omo/

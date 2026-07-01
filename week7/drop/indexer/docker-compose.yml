@@ -10,5 +10,11 @@ services:
       PORT: "8080"
       BUCKET_DIR: "/data/bucket"
       DSTACK_SOCKET: "/var/run/dstack.sock"
+      A1_SCAN_ENABLE: "1"
+      LIGHTWALLETD_URL: "https://zec.rocks:443"
+      LIGHTWALLETD_BACKUP_URL: "https://mainnet.lightwalletd.com:9067"
+      A1_SCAN_START: "3392150"
+      A1_SCAN_BATCH_BLOCKS: "20"
+      A1_SCAN_POLL_SECS: "30"
     volumes:
       - /var/run/dstack.sock:/var/run/dstack.sock
