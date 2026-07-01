@@ -63,10 +63,36 @@ fn maybe_spawn_a1_scanner(catalog: CatalogStore, dispatch: FsBucket) {
     });
 }
 
+/// Decide whether the dev seed override may be used.
+///
+/// - `Ok(Some(seed))` — override set and NO live dstack socket (local demo): use the dev seed.
+/// - `Err(..)`        — override set but a live dstack socket is present (real TEE): refuse to
+///   boot. Honoring a host-supplied seed would make the provisioning secret key host-known and
+///   defeat the "operator can't read k_drop" guarantee (every creator's content key would leak).
+/// - `Ok(None)`       — no override set: caller falls back to the KMS-derived seed.
+fn resolve_dev_seed_override(
+    override_hex: Option<&str>,
+    dstack_socket_present: bool,
+) -> anyhow::Result<Option<[u8; 32]>> {
+    let Some(hex_seed) = override_hex else {
+        return Ok(None);
+    };
+    if dstack_socket_present {
+        anyhow::bail!(
+            "refusing A2_DEV_PROVISIONING_SEED_HEX: a live dstack socket is present. The dev \
+             seed override is local-demo only and must never run inside a TEE (it would expose \
+             the provisioning secret key to the host)."
+        );
+    }
+    eprintln!("WARNING: using A2_DEV_PROVISIONING_SEED_HEX; local demo only, not TEE-secure");
+    Ok(Some(hex_32(hex_seed, "A2_DEV_PROVISIONING_SEED_HEX")?))
+}
+
 async fn provisioning_seed(ds: &Dstack) -> anyhow::Result<[u8; 32]> {
-    if let Ok(hex_seed) = std::env::var("A2_DEV_PROVISIONING_SEED_HEX") {
-        eprintln!("WARNING: using A2_DEV_PROVISIONING_SEED_HEX; local demo only, not TEE-secure");
-        return hex_32(&hex_seed, "A2_DEV_PROVISIONING_SEED_HEX");
+    let override_hex = std::env::var("A2_DEV_PROVISIONING_SEED_HEX").ok();
+    let socket_present = std::path::Path::new(&ds.socket).exists();
+    if let Some(seed) = resolve_dev_seed_override(override_hex.as_deref(), socket_present)? {
+        return Ok(seed);
     }
 
     // KMS-derived seed, stable per measurement (changes on rebuild — see C4 / Task 9).
@@ -91,4 +117,36 @@ fn env_bool(name: &str) -> bool {
 
 fn env_u64(name: &str) -> Option<u64> {
     std::env::var(name).ok().and_then(|v| v.parse().ok())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // 32 bytes of 0x00 as 64 hex chars → hex_32 parses to [0u8; 32].
+    fn zero_hex() -> String {
+        "00".repeat(32)
+    }
+
+    #[test]
+    fn dev_seed_override_refused_when_live_socket_present() {
+        // A live dstack socket means we're inside a real TEE — honoring a host-supplied
+        // seed would hand the provisioning secret key to the operator. Must refuse.
+        let out = resolve_dev_seed_override(Some(&zero_hex()), true);
+        assert!(out.is_err(), "override must be refused when a dstack socket is present");
+    }
+
+    #[test]
+    fn dev_seed_override_allowed_without_socket() {
+        // Local demo (no socket): the dev seed is permitted.
+        let out = resolve_dev_seed_override(Some(&zero_hex()), false).unwrap();
+        assert_eq!(out, Some([0u8; 32]));
+    }
+
+    #[test]
+    fn no_override_falls_through_to_kms() {
+        // No env override → Ok(None) regardless of socket presence; caller uses ds.get_key.
+        assert_eq!(resolve_dev_seed_override(None, true).unwrap(), None);
+        assert_eq!(resolve_dev_seed_override(None, false).unwrap(), None);
+    }
 }
