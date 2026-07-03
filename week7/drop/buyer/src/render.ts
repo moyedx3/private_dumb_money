@@ -2,7 +2,7 @@
 // common image magic bytes; everything else falls back to text/download.
 // (Minor gap noted to the team: add `content_type` to I3-a to avoid sniffing.)
 
-export type RenderKind = "image" | "text" | "binary";
+export type RenderKind = "image" | "video" | "text" | "binary";
 
 export function detectKind(bytes: Uint8Array): RenderKind {
   if (hasPrefix(bytes, [0x89, 0x50, 0x4e, 0x47])) return "image"; // PNG
@@ -11,6 +11,8 @@ export function detectKind(bytes: Uint8Array): RenderKind {
   if (hasPrefix(bytes, [0x52, 0x49, 0x46, 0x46]) && hasPrefixAt(bytes, 8, [0x57, 0x45, 0x42, 0x50])) {
     return "image"; // RIFF....WEBP
   }
+  if (hasPrefixAt(bytes, 4, [0x66, 0x74, 0x79, 0x70])) return "video"; // MP4/MOV: ....ftyp
+  if (hasPrefix(bytes, [0x1a, 0x45, 0xdf, 0xa3])) return "video"; // WebM / Matroska
   return isProbablyUtf8(bytes) ? "text" : "binary";
 }
 
@@ -19,6 +21,8 @@ export function mimeFor(bytes: Uint8Array): string {
   if (hasPrefix(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg";
   if (hasPrefix(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif";
   if (hasPrefix(bytes, [0x52, 0x49, 0x46, 0x46])) return "image/webp";
+  if (hasPrefixAt(bytes, 4, [0x66, 0x74, 0x79, 0x70])) return "video/mp4";
+  if (hasPrefix(bytes, [0x1a, 0x45, 0xdf, 0xa3])) return "video/webm";
   return "application/octet-stream";
 }
 

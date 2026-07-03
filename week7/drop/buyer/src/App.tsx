@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CatalogEntry, DropApi } from "./api";
 import { HttpDropApi } from "./api";
 import { bytesToArrayBuffer } from "./bytes";
-import { MockDropApi } from "./mockApi";
 import type { MemoForm } from "./memo";
 import { onchainMemoBytes } from "./memo";
 import { clearPurchase, loadPurchase, savePurchase } from "./persist";
@@ -12,21 +11,19 @@ import type { UnlockResult } from "./poller";
 import { createPurchase, fromRecoveryFile, toRecoveryFile } from "./purchase";
 import type { Purchase } from "./purchase";
 import { detectKind, mimeFor } from "./render";
-import { sodiumReady } from "./seal";
+import { decryptContent } from "./content";
+import { sodiumReady, trySealOpen } from "./seal";
 import { buildPaymentUri } from "./zip321";
 
-type Mode = "mock" | "http";
 const POLL_MS = 3000;
 const defaultIndexer = import.meta.env.VITE_DROP_INDEXER_URL ?? "http://localhost:8080";
 
 export function App() {
-  const [mode, setMode] = useState<Mode>("mock");
   const [indexerUrl, setIndexerUrl] = useState(defaultIndexer);
-  const [mockApi, setMockApi] = useState<MockDropApi | null>(null);
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [error, setError] = useState("");
 
-  const [memoForm, setMemoForm] = useState<MemoForm>("raw");
+  const [memoForm, setMemoForm] = useState<MemoForm>("text");
   const [purchase, setPurchase] = useState<Purchase | null>(null);
   const [paymentUri, setPaymentUri] = useState("");
   const [qr, setQr] = useState("");
@@ -36,24 +33,8 @@ export function App() {
 
   const pollerRef = useRef<DispatchPoller | null>(null);
 
-  const api: DropApi | null = useMemo(() => {
-    if (mode === "http") return new HttpDropApi(indexerUrl);
-    return mockApi;
-  }, [mode, indexerUrl, mockApi]);
-
-  // Build (or rebuild) the mock backend when entering mock mode.
-  useEffect(() => {
-    if (mode !== "mock") return;
-    let alive = true;
-    void (async () => {
-      await sodiumReady();
-      const m = await MockDropApi.demo();
-      if (alive) setMockApi(m);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [mode]);
+  // Always the live indexer (mock backend removed).
+  const api: DropApi = useMemo(() => new HttpDropApi(indexerUrl), [indexerUrl]);
 
   const loadCatalog = useCallback(async () => {
     if (!api) return;
@@ -169,34 +150,11 @@ export function App() {
     [purchase]
   );
 
-  const importRecovery = useCallback(
-    async (file: File) => {
-      setError("");
-      try {
-        const text = await file.text();
-        const p = fromRecoveryFile(text);
-        setUnlock(null);
-        pollerRef.current = null;
-        setPurchase(p);
-        setPolling(true);
-        if (remember) savePurchase(p);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      }
-    },
-    [remember]
-  );
-
   const downloadRecovery = useCallback(() => {
     if (!purchase) return;
     const blob = new Blob([JSON.stringify(toRecoveryFile(purchase), null, 2)], { type: "application/json" });
     triggerDownload(blob, `drop-recovery-${purchase.dropId}-${purchase.id}.json`);
   }, [purchase]);
-
-  const simulatePayment = useCallback(async () => {
-    if (!purchase || !mockApi) return;
-    await mockApi.simulateDispatch(purchase.dropId, purchase.ePub);
-  }, [purchase, mockApi]);
 
   return (
     <main className="shell">
@@ -206,23 +164,16 @@ export function App() {
           <h1>Unlockable Drop — Buyer</h1>
         </div>
         <div className="modes">
-          <label className={mode === "mock" ? "on" : ""}>
-            <input type="radio" checked={mode === "mock"} onChange={() => setMode("mock")} /> Demo (mock)
-          </label>
-          <label className={mode === "http" ? "on" : ""}>
-            <input type="radio" checked={mode === "http"} onChange={() => setMode("http")} /> Live indexer
-          </label>
+          <span className="on">Live indexer</span>
         </div>
       </header>
 
-      {mode === "http" ? (
-        <section className="panel">
-          <label>
-            Indexer URL
-            <input value={indexerUrl} onChange={(e) => setIndexerUrl(e.target.value)} />
-          </label>
-        </section>
-      ) : null}
+      <section className="panel">
+        <label>
+          Indexer URL
+          <input value={indexerUrl} onChange={(e) => setIndexerUrl(e.target.value)} />
+        </label>
+      </section>
 
       {error ? <p className="error">{error}</p> : null}
 
@@ -249,18 +200,6 @@ export function App() {
               ))}
             </ul>
           )}
-          <label className="import">
-            Resume a purchase from a recovery file
-            <input
-              type="file"
-              accept="application/json"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void importRecovery(f);
-                e.currentTarget.value = "";
-              }}
-            />
-          </label>
         </section>
       ) : null}
 
@@ -296,11 +235,6 @@ export function App() {
               </label>
               <div className="actions">
                 <button onClick={downloadRecovery}>Download recovery file</button>
-                {mode === "mock" ? (
-                  <button className="primary" onClick={() => void simulatePayment()}>
-                    Simulate payment (mock)
-                  </button>
-                ) : null}
               </div>
               <p className="note">{polling ? "Polling for your dispatch blob…" : "Idle."}</p>
             </div>
@@ -309,6 +243,8 @@ export function App() {
       ) : null}
 
       {unlock ? <Unlocked result={unlock} onDone={reset} /> : null}
+
+      <ManualUnlock api={api} />
 
       <footer className="foot">
         Network-layer correlation (your IP polling the bucket + your wallet broadcasting) is a documented,
@@ -321,7 +257,7 @@ export function App() {
 function Unlocked({ result, onDone }: { result: UnlockResult; onDone: () => void }) {
   const kind = useMemo(() => detectKind(result.content), [result.content]);
   const objectUrl = useMemo(() => {
-    if (kind !== "image") return "";
+    if (kind !== "image" && kind !== "video") return "";
     return URL.createObjectURL(new Blob([bytesToArrayBuffer(result.content)], { type: mimeFor(result.content) }));
   }, [kind, result.content]);
   useEffect(() => () => {
@@ -345,9 +281,95 @@ function Unlocked({ result, onDone }: { result: UnlockResult; onDone: () => void
         <button onClick={onDone}>Back to catalog</button>
       </div>
       {kind === "image" ? <img className="content-img" src={objectUrl} alt={result.purchase.title} /> : null}
+      {kind === "video" ? <video className="content-video" src={objectUrl} controls autoPlay loop /> : null}
       {kind === "text" ? <pre className="content-text">{text}</pre> : null}
       {kind === "binary" ? <p className="note">Binary content — use download.</p> : null}
       <button onClick={download}>Download content</button>
+    </section>
+  );
+}
+
+// Standalone tool: browse every published dispatch blob and unlock one by uploading a recovery
+// file (which carries e_priv). Decoupled from the live purchase flow — trial-opens ALL blobs, so
+// it works regardless of which purchase/e_pub the browser currently holds.
+function ManualUnlock({ api }: { api: DropApi }) {
+  const [keys, setKeys] = useState<string[]>([]);
+  const [result, setResult] = useState<UnlockResult | null>(null);
+  const [status, setStatus] = useState("");
+
+  const refresh = useCallback(async () => {
+    setStatus("");
+    try {
+      setKeys(await api.listDispatch());
+    } catch (e) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const onFile = useCallback(
+    async (file: File) => {
+      setResult(null);
+      setStatus("trial-opening every blob…");
+      await sodiumReady();
+      try {
+        const rec = fromRecoveryFile(await file.text());
+        const dispatchKeys = await api.listDispatch();
+        setKeys(dispatchKeys);
+        for (const key of dispatchKeys) {
+          let blob: Uint8Array;
+          try {
+            blob = await api.getDispatch(key);
+          } catch {
+            continue;
+          }
+          const kDrop = trySealOpen(blob, rec.ePub, rec.ePriv);
+          if (!kDrop) continue; // sealed to a different e_pub — not this recovery file's
+          const content = await api.getContent(rec.hContent);
+          const plaintext = await decryptContent(content, kDrop);
+          setResult({ purchase: rec, kDrop, content: plaintext });
+          setStatus(`✅ unlocked from blob ${key.slice(0, 12)}…`);
+          return;
+        }
+        setStatus(`no blob matched this e_priv (tried ${dispatchKeys.length}). Wrong recovery file, or payment not dispatched yet.`);
+      } catch (e) {
+        setStatus(e instanceof Error ? e.message : String(e));
+      }
+    },
+    [api]
+  );
+
+  return (
+    <section className="panel">
+      <div className="panel-head">
+        <h2>Manual unlock — dispatch blobs</h2>
+        <button onClick={() => void refresh()}>Refresh</button>
+      </div>
+      <p className="note">Published dispatch blobs on the indexer: {keys.length}</p>
+      <ul className="drops">
+        {keys.map((k) => (
+          <li key={k}>
+            <code className="uri">{k}</code>
+          </li>
+        ))}
+      </ul>
+      <label>
+        Upload recovery file (holds e_priv) — trial-opens every blob, decrypts the match:
+        <input
+          type="file"
+          accept="application/json"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void onFile(f);
+            e.currentTarget.value = "";
+          }}
+        />
+      </label>
+      {status ? <p className="note">{status}</p> : null}
+      {result ? <Unlocked result={result} onDone={() => setResult(null)} /> : null}
     </section>
   );
 }
