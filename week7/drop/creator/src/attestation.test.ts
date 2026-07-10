@@ -133,13 +133,13 @@ describe("attestation checks", () => {
     ).rejects.toThrow(/verifyQuote\/verify/);
   });
 
-  it("fails closed with setup guidance when no explicit verifier is configured", async () => {
+  it("uses the bundled QVL verifier when no explicit verifier is configured", async () => {
     vi.stubGlobal("window", {});
     vi.stubEnv("VITE_DROP_QVL_MODULE_URL", "");
 
     await expect(
       verifyAttestationOrThrow(attestation, measurement, () => verifyQuoteWithBrowserQvl(attestation))
-    ).rejects.toThrow(/VITE_DROP_QVL_MODULE_URL or window\.dropQuoteVerifier/);
+    ).rejects.toThrow(/quote verification failed/);
     await expect(
       verifyAttestationOrThrow(attestation, measurement, () => verifyQuoteWithBrowserQvl(attestation))
     ).rejects.not.toThrow(/@phala\/dcap-qvl-web/);

@@ -15,7 +15,7 @@ npm run build    # tsc + vite build
 ```
 
 - **로컬 UI/QA 모드**: Playwright가 실제 Vite 페이지를 띄우고 인덱서 응답을 route-mock한다. 서버/체인/실 quote 없이 happy path, attestation fail-closed, validation, double-submit, responsive 상태를 전부 확인한다.
-- **Live indexer 모드**: `VITE_DROP_INDEXER_URL`, `VITE_DROP_EXPECTED_MEASUREMENT_HEX`, `VITE_DROP_QVL_MODULE_URL`을 넣고 실제 `/health`·`/catalog`·`/attest`에 붙는다. live env가 없으면 smoke는 **성공이 아니라 skipped-live**로 기록된다.
+- **Live indexer 모드**: `VITE_DROP_INDEXER_URL`, `VITE_DROP_EXPECTED_MEASUREMENT_HEX`를 넣고 실제 `/health`·`/catalog`·`/attest`에 붙는다. QVL verifier는 기본 번들된다. live env가 없으면 smoke는 **성공이 아니라 skipped-live**로 기록된다.
 
 ## 한 줄 요약
 
@@ -89,15 +89,17 @@ tests/
 
 ## 검증기(QVL) 처리 방식
 
-이 앱은 `@phala/dcap-qvl-web`을 번들 기본값으로 넣지 않는다. 해당 패키지의 production advisory와 브라우저 export 모양 때문에, 기본 의존성으로 두면 “검증되는 척하지만 실제 live 기본 경로가 깨지는” 상태가 된다.
+이 앱은 `@phala/dcap-qvl`을 번들 기본값으로 사용한다. 예전 `@phala/dcap-qvl-web` 대신 pure JS QVL을 붙였고, live provisioning에서는 demo verifier 없이 브라우저가 직접 quote verification을 수행한다.
 
-대신 live quote 검증은 명시적으로 주입한다:
+기본 검증기는 collateral을 가져와 DCAP quote를 검증하고, TCB status가 `UpToDate`일 때만 통과시킨다. TDX quote에서는 `RTMR3`를 `codeMeasurement`로, quote의 `reportData`를 `reportData`로 반환한다. 그 다음 기존 Creator 로직이 `measurement == expectedMeasurement`, `report_data[0..32] == sha256(pubkey)`를 다시 확인한다.
+
+기본 verifier 대신 다른 verifier를 실험해야 할 때만 명시적으로 주입한다:
 
 ```bash
 VITE_DROP_QVL_MODULE_URL="$NODE_OR_BROWSER_IMPORTABLE_VERIFIER"
 ```
 
-검증 모듈은 `verifyQuote(quoteHex)` 또는 `verify(quoteHex)`를 export해야 하고, 결과는 `{ ok, codeMeasurement, reportData }` 또는 테스트가 허용하는 alias를 반환해야 한다. 로컬 Playwright QA는 `window.dropQuoteVerifier` mock을 설치해 UI 흐름을 검증한다.
+검증 모듈은 `verifyQuote(quoteHex)` 또는 `verify(quoteHex)`를 export해야 하고, 결과는 `{ ok, codeMeasurement, reportData }` 또는 테스트가 허용하는 alias를 반환해야 한다. 로컬 Playwright QA는 `window.dropQuoteVerifier` mock을 설치해 UI 흐름을 검증한다. PCCS를 바꾸려면 `VITE_DROP_PCCS_URL`을 설정한다.
 
 ## 테스트하는 법
 
@@ -123,7 +125,6 @@ LIVE SMOKE SKIPPED: missing VITE_DROP_INDEXER_URL, VITE_DROP_EXPECTED_MEASUREMEN
 ```bash
 VITE_DROP_INDEXER_URL="$LIVE_INDEXER_URL" \
 VITE_DROP_EXPECTED_MEASUREMENT_HEX="$EXPECTED_MEASUREMENT" \
-VITE_DROP_QVL_MODULE_URL="$NODE_IMPORTABLE_VERIFIER" \
 npm run qa:http-smoke
 ```
 
@@ -131,7 +132,7 @@ npm run qa:http-smoke
 
 ## 알려진 한계 / 팀 싱크 포인트
 
-- **실 quote Check 1은 아직 외부 통합 증거가 필요하다.** 로컬 QA는 mock verifier로 UI와 fail-closed를 검증한다. spike3/A2 실 quote로 `VITE_DROP_QVL_MODULE_URL` verifier를 붙여 한 번 더 확인해야 full lane DoD가 닫힌다.
+- **실 quote Check 1은 bundled QVL로 확인한다.** 로컬 UI QA는 여전히 mock verifier로 화면과 fail-closed를 검증하지만, live smoke는 `@phala/dcap-qvl` 기반 production verifier를 기본 사용한다. spike3/A2 실 quote와 현재 published measurement로 `npm run qa:http-smoke`를 한 번 더 돌려야 full lane DoD가 닫힌다.
 - **A2와 I5 payload 인코딩을 고정해야 한다.** 현재 구현은 sealed JSON이다. A2가 CBOR을 요구하면 `provision.ts`의 encode 지점과 Rust decoder를 같은 골든 픽스처로 맞춰야 한다.
 - **B와 I4 복호 라운드트립을 최종 확인해야 한다.** content blob 분해 규칙은 Buyer와 맞춰 뒀지만, 실제 카탈로그→구매→dispatch→복호 전체는 B/A2 통합에서 한 번 더 본다.
 - **비밀은 브라우저 밖으로 평문 전송하지 않는다.** `check-secret-sinks.mjs`가 console/log/storage/download/DOM sink를 훑고, Playwright는 실패 경로에서 provisioning이 호출되지 않는지 본다.

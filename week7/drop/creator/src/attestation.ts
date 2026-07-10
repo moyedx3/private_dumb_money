@@ -1,4 +1,5 @@
 import { fromHex, sha256Hex } from "./bytes";
+import { verifyQuote as verifyQuoteWithBundledQvl } from "./qvl-verifier";
 
 export type AttestResponse = {
   quote_hex: string;
@@ -117,7 +118,7 @@ function normalizeQvlResult(raw: unknown): QuoteVerification {
 
 async function loadVerifierFunction(): Promise<VerifierLoadResult> {
   const browserVerifier = typeof window !== "undefined" ? window.dropQuoteVerifier : undefined;
-  const mod = browserVerifier ?? (await explicitQvlModule());
+  const mod = browserVerifier ?? (await explicitQvlModule()) ?? { verifyQuote: verifyQuoteWithBundledQvl };
   const direct = verifierFunction(mod);
   if (direct) {
     return { kind: "loaded", verify: direct };
@@ -136,7 +137,7 @@ function importQvlModule(specifier: string): Promise<unknown> {
 async function explicitQvlModule(): Promise<unknown> {
   const specifier = import.meta.env.VITE_DROP_QVL_MODULE_URL?.trim();
   if (!specifier) {
-    throw new Error("quote verifier setup requires VITE_DROP_QVL_MODULE_URL or window.dropQuoteVerifier");
+    return undefined;
   }
   return importQvlModule(specifier);
 }

@@ -8,6 +8,7 @@ import {
   stringField,
   truthyField
 } from "./http-smoke-core.mjs";
+import { verifyQuote as productionVerifyQuote } from "./production-qvl-verifier.mjs";
 
 export async function verifyAttestation(attestation, expectedMeasurement) {
   const pubkeyHash = sha256Hex(fromHex(attestation.provisioning_pubkey_hex));
@@ -36,10 +37,7 @@ export async function verifyAttestation(attestation, expectedMeasurement) {
 async function loadVerifier() {
   const specifier = process.env.VITE_DROP_QVL_MODULE_URL?.trim();
   if (!specifier) {
-    throw new SmokeError(
-      "verifier setup",
-      "VITE_DROP_QVL_MODULE_URL must be set to a Node-importable verifier module exposing verifyQuote/verify"
-    );
+    return async (quoteHex) => normalizeVerifierResult(await productionVerifyQuote(quoteHex));
   }
 
   let mod;
