@@ -1,0 +1,5 @@
+# deps + build
+seed/node_modules/
+# per-presenter config (holds real creator UFVKs = viewing keys) — never commit
+seed/drops.json
+.env

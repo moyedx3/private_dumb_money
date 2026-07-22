@@ -1,0 +1,22 @@
+# systemd unit for the demo indexer (no TEE). Copy to /etc/systemd/system/drop-indexer.service,
+# fill SEED_HEX + paths, then:  sudo systemctl daemon-reload && sudo systemctl enable --now drop-indexer
+[Unit]
+Description=drop-indexer (demo web server, no TEE)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Environment=A2_DEV_PROVISIONING_SEED_HEX=REPLACE_WITH_SEED_HEX
+Environment=A1_SCAN_ENABLE=1
+Environment=LIGHTWALLETD_URL=https://zec.rocks:443
+Environment=BUCKET_DIR=/home/ubuntu/drop-bucket
+Environment=PORT=8080
+Environment=RUST_LOG=info
+ExecStart=/home/ubuntu/private_dumb_money/week7/drop/indexer/target/release/drop-indexer
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

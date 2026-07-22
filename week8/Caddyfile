@@ -1,0 +1,19 @@
+# Caddy: serve the buyer SPA + reverse-proxy the indexer, with automatic HTTPS.
+# SITE_ADDRESS = <EC2-public-ip>.sslip.io  → sslip.io resolves to the IP, Caddy gets a free
+# Let's Encrypt cert (needs ports 80+443 open). No domain purchase, no cert wrangling.
+
+{$SITE_ADDRESS} {
+	encode gzip
+
+	# /api/* → indexer on the same box (prefix stripped: /api/catalog → /catalog)
+	handle_path /api/* {
+		reverse_proxy 127.0.0.1:8080
+	}
+
+	# everything else → buyer single-page app
+	handle {
+		root * /srv/buyer
+		try_files {path} /index.html
+		file_server
+	}
+}
