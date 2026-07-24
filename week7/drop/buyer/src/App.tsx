@@ -180,7 +180,16 @@ export function App() {
       {!purchase ? (
         <section className="panel">
           <div className="panel-head">
-            <h2>Catalog</h2>
+            <div className="head-title">
+              <h2>Catalog</h2>
+              <span
+                className="help"
+                tabIndex={0}
+                data-tip="판매 중인 드롭 목록. Buy를 누르면 결제용 QR이 나오고, Zcash로 결제하면 복호화 키를 받아 콘텐츠(이미지)를 볼 수 있습니다."
+              >
+                ?
+              </span>
+            </div>
             <button onClick={() => void loadCatalog()}>Refresh</button>
           </div>
           {catalog.length === 0 ? (
@@ -357,7 +366,16 @@ function ManualUnlock({ api }: { api: DropApi }) {
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2>Manual unlock — dispatch blobs</h2>
+        <div className="head-title">
+          <h2>Manual unlock — dispatch blobs</h2>
+          <span
+            className="help"
+            tabIndex={0}
+            data-tip="이미 결제했는데 이 브라우저에서 자동으로 안 열렸을 때 쓰는 복구 기능. 결제 화면에서 받은 recovery 파일(내 개인키)을 올리면 내 콘텐츠를 찾아 직접 복호화합니다. 탭을 닫았거나 다른 기기에서 열 때 유용."
+          >
+            ?
+          </span>
+        </div>
         <button onClick={() => void refresh()}>Refresh</button>
       </div>
       <p className="note">Published dispatch blobs on the indexer: {keys.length}</p>

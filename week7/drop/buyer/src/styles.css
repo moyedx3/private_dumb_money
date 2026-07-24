@@ -105,6 +105,44 @@ body {
 .panel-head h2 { margin: 0; color: #0a246a; font-size: 12px; font-weight: bold; }
 h2 { margin: 0; font-size: 12px; color: #0a246a; }
 
+/* "?" help icon + XP-style tooltip (hover or tap) */
+.head-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.help {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  border: 1px solid #7f9db9;
+  background: #fff;
+  color: #0a246a;
+  font: bold 10px/1 Tahoma, sans-serif;
+  cursor: help;
+  user-select: none;
+}
+.help::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: 135%;
+  left: -2px;
+  width: min(240px, 72vw);
+  padding: 6px 8px;
+  background: #ffffe1;                 /* XP tooltip yellow */
+  border: 1px solid #000;
+  color: #000;
+  font: normal 11px/1.45 Tahoma, sans-serif;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.08s;
+  z-index: 30;
+  pointer-events: none;
+}
+.help:hover::after,
+.help:focus::after { opacity: 1; visibility: visible; }
+
 /* ---- form controls ---- */
 label {
   display: flex;
