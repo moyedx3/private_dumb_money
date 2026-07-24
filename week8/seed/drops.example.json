@@ -1,0 +1,26 @@
+[
+  {
+    "drop_id": 1,
+    "title": "Test Pattern",
+    "price_zec": "0.0005",
+    "image": "images/drop1.png",
+    "creator_ufvk": "PASTE_uview1_FROM_gen-wallet",
+    "deposit_addr": "PASTE_u1_shielded_addr_FROM_SAME_WALLET"
+  },
+  {
+    "drop_id": 2,
+    "title": "RGB Bars",
+    "price_zec": "0.0005",
+    "image": "images/drop2.png",
+    "creator_ufvk": "PASTE_uview1_FROM_gen-wallet",
+    "deposit_addr": "PASTE_u1_shielded_addr_FROM_SAME_WALLET"
+  },
+  {
+    "drop_id": 3,
+    "title": "SMPTE Bars",
+    "price_zec": "0.0005",
+    "image": "images/drop3.png",
+    "creator_ufvk": "PASTE_uview1_FROM_gen-wallet",
+    "deposit_addr": "PASTE_u1_shielded_addr_FROM_SAME_WALLET"
+  }
+]

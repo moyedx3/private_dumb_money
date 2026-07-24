@@ -19,7 +19,7 @@ const POLL_MS = 3000;
 const defaultIndexer = import.meta.env.VITE_DROP_INDEXER_URL ?? "http://localhost:8080";
 
 export function App() {
-  const [indexerUrl, setIndexerUrl] = useState(defaultIndexer);
+  const [indexerUrl] = useState(defaultIndexer); // fixed to VITE_DROP_INDEXER_URL; not shown in the UI
   const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
   const [error, setError] = useState("");
 
@@ -158,29 +158,38 @@ export function App() {
 
   return (
     <main className="shell">
-      <header className="toolbar">
-        <div>
-          <p className="eyebrow">Lane B</p>
-          <h1>Unlockable Drop — Buyer</h1>
+      <div className="xp-window">
+        <div className="title-bar">
+          <div className="wintitle">
+            <span className="winicon">📦</span>
+            <h1>Drop Buyer</h1>
+          </div>
+          <div className="modes">
+            <span className="on">Live indexer</span>
+            <span className="winctl">
+              <span>_</span>
+              <span>▢</span>
+              <span className="close">✕</span>
+            </span>
+          </div>
         </div>
-        <div className="modes">
-          <span className="on">Live indexer</span>
-        </div>
-      </header>
-
-      <section className="panel">
-        <label>
-          Indexer URL
-          <input value={indexerUrl} onChange={(e) => setIndexerUrl(e.target.value)} />
-        </label>
-      </section>
+        <div className="window-body">
 
       {error ? <p className="error">{error}</p> : null}
 
       {!purchase ? (
         <section className="panel">
           <div className="panel-head">
-            <h2>Catalog</h2>
+            <div className="head-title">
+              <h2>Catalog</h2>
+              <span
+                className="help"
+                tabIndex={0}
+                data-tip="판매 중인 드롭 목록. Buy를 누르면 결제용 QR이 나오고, Zcash로 결제하면 복호화 키를 받아 콘텐츠(이미지)를 볼 수 있습니다."
+              >
+                ?
+              </span>
+            </div>
             <button onClick={() => void loadCatalog()}>Refresh</button>
           </div>
           {catalog.length === 0 ? (
@@ -245,11 +254,13 @@ export function App() {
       {unlock ? <Unlocked result={unlock} onDone={reset} /> : null}
 
       <ManualUnlock api={api} />
+        </div>
+      </div>
 
-      <footer className="foot">
-        Network-layer correlation (your IP polling the bucket + your wallet broadcasting) is a documented,
-        out-of-scope limitation — needs Tor/mixnet, not addressed in the demo.
-      </footer>
+      <div className="taskbar">
+        <button className="start" type="button">start</button>
+        <Clock />
+      </div>
     </main>
   );
 }
@@ -292,6 +303,16 @@ function Unlocked({ result, onDone }: { result: UnlockResult; onDone: () => void
 // Standalone tool: browse every published dispatch blob and unlock one by uploading a recovery
 // file (which carries e_priv). Decoupled from the live purchase flow — trial-opens ALL blobs, so
 // it works regardless of which purchase/e_pub the browser currently holds.
+// Taskbar clock — real local time, XP-style (h:mm AM/PM).
+function Clock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 15000);
+    return () => clearInterval(id);
+  }, []);
+  return <span className="tray">{now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span>;
+}
+
 function ManualUnlock({ api }: { api: DropApi }) {
   const [keys, setKeys] = useState<string[]>([]);
   const [result, setResult] = useState<UnlockResult | null>(null);
@@ -345,7 +366,16 @@ function ManualUnlock({ api }: { api: DropApi }) {
   return (
     <section className="panel">
       <div className="panel-head">
-        <h2>Manual unlock — dispatch blobs</h2>
+        <div className="head-title">
+          <h2>Manual unlock — dispatch blobs</h2>
+          <span
+            className="help"
+            tabIndex={0}
+            data-tip="이미 결제했는데 이 브라우저에서 자동으로 안 열렸을 때 쓰는 복구 기능. 결제 화면에서 받은 recovery 파일(내 개인키)을 올리면 내 콘텐츠를 찾아 직접 복호화합니다. 탭을 닫았거나 다른 기기에서 열 때 유용."
+          >
+            ?
+          </span>
+        </div>
         <button onClick={() => void refresh()}>Refresh</button>
       </div>
       <p className="note">Published dispatch blobs on the indexer: {keys.length}</p>

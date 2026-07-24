@@ -1,0 +1,9 @@
+{
+  "name": "drop-demo-seed",
+  "private": true,
+  "type": "module",
+  "description": "Pre-seed the demo indexer with encrypted-image drops (no TEE).",
+  "dependencies": {
+    "libsodium-wrappers": "^0.7.15"
+  }
+}

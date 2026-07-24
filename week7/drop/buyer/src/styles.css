@@ -1,264 +1,327 @@
-:root {
-  color-scheme: dark;
-  --bg: #0d1117;
-  --panel: #161b22;
-  --line: #30363d;
-  --text: #e6edf3;
-  --muted: #9da7b3;
-  --accent: #4c8dff;
-  --warn: #f0b429;
-  --err: #ff6b6b;
-  --ok: #3fb950;
-}
+/* Windows XP "Luna" theme — one app window, grouped sections inside. */
 
-* {
-  box-sizing: border-box;
-}
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  color: #000;
+  font: 12px/1.45 Tahoma, "Segoe UI", "MS Sans Serif", Geneva, sans-serif;
+  min-height: 100vh;
+  /* "Bliss"-ish desktop: sky fading into green hills */
+  background: linear-gradient(180deg,
+    #5aa5f0 0%, #74b4f4 40%, #8fc9f7 52%,
+    #7cb64a 58%, #63a038 66%, #4e8b34 80%, #3f6f2a 100%) fixed;
 }
 
 .shell {
-  max-width: 760px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 24px 16px 48px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  padding: 26px 12px 60px; /* bottom room for taskbar */
 }
 
-.toolbar {
+/* ---- the single application window ---- */
+.xp-window {
+  background: #ece9d8;
+  border: 3px solid #0845d6;
+  border-radius: 8px 8px 4px 4px;
+  box-shadow: 2px 3px 14px rgba(0, 0, 0, 0.35);
+  overflow: hidden; /* clip the title bar into the rounded top */
+}
+
+.title-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 16px;
-}
-
-.eyebrow {
-  margin: 0;
-  color: var(--accent);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-h1 {
-  margin: 2px 0 0;
-  font-size: 22px;
-}
-
-h2 {
-  margin: 0;
-  font-size: 17px;
-}
-
-.modes {
-  display: flex;
   gap: 8px;
+  padding: 3px 3px 4px 8px;
+  color: #fff;
+  background: linear-gradient(180deg,
+    #0997ff 0%, #0053ee 9%, #0050ee 18%, #0855ef 44%,
+    #085eff 78%, #0850ee 92%, #0846d8 100%);
 }
-
-.modes label {
-  padding: 6px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--muted);
-  cursor: pointer;
+.wintitle { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.winicon { font-size: 15px; line-height: 1; }
+.title-bar h1 {
+  margin: 0;
   font-size: 13px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.45);
+  white-space: nowrap;
 }
 
-.modes label.on {
-  color: var(--text);
-  border-color: var(--accent);
-}
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 16px;
+.window-body {
+  padding: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.panel-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+/* the "Live indexer" pill + fake window controls in the title bar */
+.modes { display: flex; align-items: center; gap: 6px; }
+.modes .on {
+  font-size: 11px;
+  color: #eaf3ff;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 3px;
+  padding: 1px 7px;
+  white-space: nowrap;
 }
-
-label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--muted);
+.winctl { display: flex; gap: 3px; }
+.winctl span {
+  width: 21px; height: 21px;
+  display: grid; place-items: center;
+  font: bold 11px/1 Tahoma, sans-serif;
+  color: #fff;
+  border: 1px solid #ffffff;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #3d95ff, #0f62e8 55%, #0850ee);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  cursor: default;
 }
+.winctl .close { background: linear-gradient(180deg, #ef937a, #dd4f22 55%, #c5401b); }
 
-input,
-select {
-  background: #0d1117;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 8px 10px;
-  font: inherit;
-}
-
-button {
-  background: #21262d;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 8px 12px;
-  cursor: pointer;
-  font: inherit;
-}
-
-button:hover {
-  border-color: var(--accent);
-}
-
-button.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #08111f;
-  font-weight: 600;
-}
-
-.drops {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.drops li {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-}
-
-.drops li > div {
-  display: flex;
-  flex-direction: column;
-}
-
-.price {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.pay {
-  display: flex;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.qr {
-  width: 240px;
-  min-height: 240px;
-  background: #fff;
-  border-radius: 10px;
-  display: grid;
-  place-items: center;
-}
-
-.qr img {
-  display: block;
-}
-
-.pay-detail {
-  flex: 1;
-  min-width: 240px;
+/* ---- grouped sections inside the window ---- */
+.panel {
+  background: #ece9d8;
+  border: 1px solid #c8c4b4;
+  border-radius: 3px;
+  box-shadow: inset 1px 1px 0 #ffffff, inset -1px -1px 0 #d6d2c4;
+  padding: 10px 11px;
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
-
-.memo-form {
-  flex-direction: row;
+.panel-head {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #d6d2c4;
 }
+.panel-head h2 { margin: 0; color: #0a246a; font-size: 12px; font-weight: bold; }
+h2 { margin: 0; font-size: 12px; color: #0a246a; }
 
-.remember {
-  flex-direction: row;
+/* "?" help icon + XP-style tooltip (hover or tap) */
+.head-title { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.help {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 15px; height: 15px;
+  border-radius: 50%;
+  border: 1px solid #7f9db9;
+  background: #fff;
+  color: #0a246a;
+  font: bold 10px/1 Tahoma, sans-serif;
+  cursor: help;
+  user-select: none;
+}
+.help::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: 135%;
+  left: -2px;
+  width: min(240px, 72vw);
+  padding: 6px 8px;
+  background: #ffffe1;                 /* XP tooltip yellow */
+  border: 1px solid #000;
+  color: #000;
+  font: normal 11px/1.45 Tahoma, sans-serif;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.08s;
+  z-index: 30;
+  pointer-events: none;
+}
+.help:hover::after,
+.help:focus::after { opacity: 1; visibility: visible; }
+
+/* ---- form controls ---- */
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  color: #1b1b1b;
+}
+input, select {
+  background: #fff;
+  color: #000;
+  font: inherit;
+  padding: 3px 5px;
+  border: 1px solid #7f9db9;
+  box-shadow: inset 1px 1px 0 #b6c4d6;
+  border-radius: 0;
+}
+input[type="file"] { border: 0; box-shadow: none; padding: 2px 0; background: transparent; }
+
+button {
+  font: 12px Tahoma, sans-serif;
+  color: #000;
+  padding: 3px 12px;
+  min-width: 70px;
+  cursor: pointer;
+  border: 1px solid #003c74;
+  border-radius: 3px;
+  background: linear-gradient(180deg, #ffffff 0%, #f3f2ea 45%, #dcd6c4 90%, #e7e2d2 100%);
+  box-shadow: inset 0 0 0 1px #fdfdfb, 0 1px 0 rgba(0, 0, 0, 0.1);
+}
+button:hover { border-color: #e08a00; box-shadow: inset 0 0 0 1px #fff, inset 0 0 4px #ffd27f; }
+button:active { background: linear-gradient(180deg, #dcd6c4, #efeade); box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.25); }
+
+button.primary {
+  font-weight: bold;
+  color: #f6fff2;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.35);
+  border-color: #2b5c12;
+  background: linear-gradient(180deg, #7bd162 0%, #4fa62f 45%, #327d1c 92%, #3c8a22 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+button.primary:hover { border-color: #eaff00; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.6), 0 0 5px #a6ff7a; }
+.panel-head button { min-width: 0; padding: 2px 9px; font-size: 11px; }
+
+/* ---- catalog / dispatch lists = XP listbox ---- */
+.drops {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid #7f9db9;
+  box-shadow: inset 1px 1px 0 #b6c4d6;
+}
+.drops li {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
-  color: var(--text);
-  font-size: 13px;
+  padding: 7px 9px;
+  border-radius: 3px;
 }
+.drops li:hover { background: #d8e6fb; }
+.drops li > div { display: flex; flex-direction: column; }
+.drops li strong { font-size: 13px; }
+.price { color: #2b5c12; font-weight: bold; font-size: 12px; }
 
-.import {
-  flex-direction: row;
-  align-items: center;
-  gap: 8px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
-  color: var(--muted);
+/* ---- payment ---- */
+.pay { display: flex; gap: 16px; flex-wrap: wrap; }
+.qr {
+  width: 240px; min-height: 240px;
+  background: #fff;
+  border: 2px solid #7f9db9;
+  box-shadow: inset 1px 1px 0 #b6c4d6;
+  display: grid; place-items: center;
 }
-
+.qr img { display: block; }
+.pay-detail { flex: 1; min-width: 240px; display: flex; flex-direction: column; gap: 9px; }
+.memo-form { flex-direction: row; align-items: center; gap: 8px; }
+.remember { flex-direction: row; align-items: center; gap: 8px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .uri {
   display: block;
   word-break: break-all;
-  background: #0d1117;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px;
-  font-size: 11px;
-  color: var(--muted);
+  background: #fff;
+  border: 1px solid #7f9db9;
+  box-shadow: inset 1px 1px 0 #b6c4d6;
+  padding: 6px;
+  font: 11px "Lucida Console", monospace;
+  color: #333;
 }
 
-.actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
+/* ---- messages ---- */
+.warn { font-size: 12px; color: #5a3a00; background: #ffffcc; border: 1px solid #e3c000; padding: 6px 8px; }
+.note { color: #333; font-size: 12px; margin: 0; }
+.error { font-size: 12px; color: #7a0000; background: #ffe4e1; border: 1px solid #d64a20; padding: 6px 8px; }
 
-.warn {
-  color: var(--warn);
-  font-size: 13px;
-}
-
-.note {
-  color: var(--muted);
-  font-size: 13px;
-  margin: 0;
-}
-
-.error {
-  color: var(--err);
-  font-size: 13px;
-}
-
-.content-img {
+/* ---- unlocked content ---- */
+.content-img, .content-video {
   max-width: 100%;
-  border-radius: 10px;
+  border: 2px solid #7f9db9;
+  box-shadow: inset 1px 1px 0 #b6c4d6;
+  background: #fff;
 }
-
 .content-text {
   white-space: pre-wrap;
   word-break: break-word;
-  background: #0d1117;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 12px;
+  background: #fff;
+  border: 1px solid #7f9db9;
+  box-shadow: inset 1px 1px 0 #b6c4d6;
+  padding: 10px;
   margin: 0;
+  font: 12px "Lucida Console", monospace;
+}
+.panel.unlocked .panel-head { border-bottom-color: #4fa62f; }
+.panel.unlocked .panel-head h2 { color: #2f7d16; }
+
+/* ---- taskbar ---- */
+.taskbar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(180deg, #2f7cf6 0%, #2461e8 8%, #1e5ad8 42%, #245fe0 92%, #1c50c8 100%);
+  border-top: 1px solid #0f3fb0;
+  box-shadow: inset 0 1px 0 #5b9bff;
+  z-index: 10;
+}
+.taskbar .start {
+  min-width: 0;
+  height: 30px;
+  padding: 0 22px 0 12px;
+  font: italic bold 15px Tahoma, sans-serif;
+  color: #fff;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.4);
+  border: 0;
+  border-radius: 0 12px 12px 0;
+  background: linear-gradient(180deg, #79d15e 0%, #4faf2c 45%, #2f8016 92%, #3c9020 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+.taskbar .tray {
+  color: #eaf3ff;
+  font-size: 11px;
+  padding: 0 12px;
+  border-left: 1px solid #1746b8;
+  box-shadow: inset 1px 0 0 #5b9bff;
+  height: 30px;
+  display: flex;
+  align-items: center;
 }
 
-.foot {
-  color: var(--muted);
-  font-size: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 12px;
+/* ---- mobile / narrow screens ---- */
+@media (max-width: 640px) {
+  body { font-size: 13px; }
+  .shell { padding: 12px 8px 54px; }
+  .window-body { padding: 10px; gap: 10px; }
+  .panel { padding: 9px 10px; }
+  .title-bar h1, .panel-head h2 { font-size: 13px; }
+
+  button { min-height: 40px; padding: 9px 14px; }
+  .panel-head button { min-height: 30px; padding: 5px 10px; }
+  input, select { padding: 9px 8px; font-size: 16px; } /* 16px stops iOS zoom-on-focus */
+
+  .pay { flex-direction: column; gap: 12px; }
+  .qr { width: 100%; max-width: 260px; min-height: 0; margin: 0 auto; padding: 8px 0; }
+  .qr img { max-width: 100%; height: auto; }
+  .pay-detail { min-width: 0; width: 100%; }
+
+  .drops li { flex-wrap: wrap; row-gap: 6px; }
+  .drops li > div { flex: 1 1 auto; }
+
+  .winctl { display: none; }
+}
+
+@media (max-width: 380px) {
+  .modes .on { display: none; }
+  .taskbar .tray { display: none; }
 }
