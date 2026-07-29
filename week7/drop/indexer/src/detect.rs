@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use orchard::note_encryption::OrchardDomain;
+use orchard::note_encryption::{IronwoodDomain, OrchardDomain};
 use sapling_crypto::note_encryption::{
     try_sapling_note_decryption, PreparedIncomingViewingKey as SaplingPreparedIvk,
     Zip212Enforcement,
@@ -22,6 +22,10 @@ pub struct IncomingNote {
 pub enum ShieldedPool {
     Sapling,
     Orchard,
+    /// NU6.3 "Ironwood" pool. Reuses Orchard's Action shape, note encryption, and
+    /// incoming viewing keys; after activation new shielded payments land here
+    /// because Orchard becomes exit-only.
+    Ironwood,
 }
 
 impl ShieldedPool {
@@ -29,6 +33,7 @@ impl ShieldedPool {
         match self {
             ShieldedPool::Sapling => "sapling",
             ShieldedPool::Orchard => "orchard",
+            ShieldedPool::Ironwood => "ironwood",
         }
     }
 }
@@ -188,6 +193,26 @@ pub fn detect_incoming(
                 if let Some((note, _addr, memo)) = try_note_decryption(&domain, pivk, action) {
                     notes.push(IncomingNote {
                         pool: ShieldedPool::Orchard,
+                        value_zat: note.value().inner(),
+                        memo: memo.to_vec(),
+                    });
+                }
+            }
+        }
+    }
+
+    // NU6.3 "Ironwood" pool. `ironwood_bundle()` returns the same Orchard-shaped
+    // bundle type and shares the Orchard IVKs, but Ironwood notes use a v3 plaintext,
+    // so `IronwoodDomain` (not `OrchardDomain`) is what actually decrypts them. After
+    // activation Orchard is exit-only and new payments arrive here, so this path is
+    // what keeps detection working post-upgrade.
+    if let Some(bundle) = tx.ironwood_bundle() {
+        for pivk in &orchard_ivks {
+            for action in bundle.actions() {
+                let domain = IronwoodDomain::for_action(action);
+                if let Some((note, _addr, memo)) = try_note_decryption(&domain, pivk, action) {
+                    notes.push(IncomingNote {
+                        pool: ShieldedPool::Ironwood,
                         value_zat: note.value().inner(),
                         memo: memo.to_vec(),
                     });
