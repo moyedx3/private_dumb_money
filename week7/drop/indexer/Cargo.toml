@@ -14,7 +14,7 @@ axum = "0.7"
 blake2 = "0.10"
 dryoc = "0.7"
 hex = "0.4"
-orchard = "0.13"
+orchard = "0.15"
 prost = "0.12"
 sapling-crypto = { version = "0.7", default-features = false }
 serde = { version = "1", features = ["derive"] }
@@ -27,10 +27,10 @@ tower-http = { version = "0.5", features = ["cors"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 zecscope-scanner = "0.1"
-zcash_keys = { version = "0.13", default-features = false, features = ["sapling", "orchard"] }
+zcash_keys = { version = "0.16", default-features = false, features = ["sapling", "orchard"] }
 zcash_note_encryption = "0.4"
-zcash_primitives = "0.27"
-zcash_protocol = "0.8"
+zcash_primitives = "0.30"
+zcash_protocol = "0.10"
 zeroize = "1"
 zip32 = "0.2"
 
