@@ -49,7 +49,8 @@ impl CatalogStore {
 
     /// Public catalog entries (interface I3-a) — no secrets (no `k_drop`, no `creator_ufvk`).
     pub fn public_entries(&self) -> Vec<CatalogEntry> {
-        self.inner
+        let mut entries: Vec<CatalogEntry> = self
+            .inner
             .read()
             .unwrap()
             .iter()
@@ -60,7 +61,11 @@ impl CatalogStore {
                 title: title.clone(),
                 deposit_addr: c.deposit_addr.clone(),
             })
-            .collect()
+            .collect();
+        // HashMap iteration order is nondeterministic; sort by drop_id so the
+        // public catalog renders in a stable, predictable order for all clients.
+        entries.sort_by_key(|e| e.drop_id);
+        entries
     }
 }
 
